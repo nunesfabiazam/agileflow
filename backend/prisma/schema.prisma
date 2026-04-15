@@ -1,0 +1,365 @@
+// AgileFlow — Prisma Schema
+// PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  PM
+  DEVELOPER
+  QA
+  UX
+  SCRUM_MASTER
+  STAKEHOLDER
+  VIEWER
+}
+
+enum TaskType {
+  STORY
+  BUG
+  TASK
+  SPIKE
+  EPIC
+  SUBTASK
+}
+
+enum TaskPriority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum SprintStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum DocType {
+  SPEC
+  DIAGRAM
+  DESIGN
+  REFERENCE
+  TEMPLATE
+  TEST_PLAN
+  WIREFRAME
+  RUNBOOK
+  OTHER
+}
+
+// ─── USER ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  name          String
+  password      String
+  role          UserRole  @default(DEVELOPER)
+  avatarUrl     String?
+  color         String    @default("#6366f1")
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  ownedProjects    Project[]        @relation("ProjectOwner")
+  projectMembers   ProjectMember[]
+  assignedTasks    TaskAssignee[]
+  comments         Comment[]
+  createdTasks     Task[]           @relation("TaskCreator")
+  createdDocs      Document[]
+  createdEpics     Epic[]
+  activityLogs     ActivityLog[]
+
+  @@map("users")
+}
+
+// ─── PROJECT ──────────────────────────────────────────────────────────────────
+
+model Project {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  key         String    @unique  // e.g. "AF", "BE" — used for task IDs like AF-101
+  color       String    @default("#6366f1")
+  iconEmoji   String    @default("📦")
+  isArchived  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  ownerId     String
+  owner       User      @relation("ProjectOwner", fields: [ownerId], references: [id])
+
+  // Relations
+  members        ProjectMember[]
+  sprints        Sprint[]
+  epics          Epic[]
+  tasks          Task[]
+  kanbanColumns  KanbanColumn[]
+  documents      Document[]
+  spaces         DocSpace[]
+  activityLogs   ActivityLog[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  role      UserRole @default(DEVELOPER)
+  joinedAt  DateTime @default(now())
+
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+// ─── KANBAN COLUMN ────────────────────────────────────────────────────────────
+
+model KanbanColumn {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#64748b")
+  order     Int      // display order
+  isDefault Boolean  @default(false)  // e.g. "Done" maps to sprint completion
+  createdAt DateTime @default(now())
+
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  tasks     Task[]
+
+  @@map("kanban_columns")
+}
+
+// ─── SPRINT ───────────────────────────────────────────────────────────────────
+
+model Sprint {
+  id          String       @id @default(uuid())
+  name        String
+  goal        String?
+  status      SprintStatus @default(PLANNING)
+  startDate   DateTime?
+  endDate     DateTime?
+  velocity    Int?         // actual story points completed
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  tasks       Task[]
+
+  @@map("sprints")
+}
+
+// ─── EPIC ─────────────────────────────────────────────────────────────────────
+
+model Epic {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  color       String    @default("#6366f1")
+  startDate   DateTime?
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creatorId   String
+  creator     User      @relation(fields: [creatorId], references: [id])
+
+  tasks       Task[]
+
+  @@map("epics")
+}
+
+// ─── TASK ─────────────────────────────────────────────────────────────────────
+
+model Task {
+  id            String        @id @default(uuid())
+  taskKey       String        // e.g. "AF-101" — generated from project.key + sequence
+  title         String
+  description   String?
+  type          TaskType      @default(TASK)
+  priority      TaskPriority  @default(MEDIUM)
+  storyPoints   Int?
+  dueDate       DateTime?
+  order         Int           @default(0) // position within column
+  isClosed      Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  projectId     String
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  columnId      String?
+  column        KanbanColumn? @relation(fields: [columnId], references: [id])
+
+  sprintId      String?
+  sprint        Sprint?       @relation(fields: [sprintId], references: [id])
+
+  epicId        String?
+  epic          Epic?         @relation(fields: [epicId], references: [id])
+
+  parentId      String?
+  parent        Task?         @relation("SubTasks", fields: [parentId], references: [id])
+  subtasks      Task[]        @relation("SubTasks")
+
+  creatorId     String
+  creator       User          @relation("TaskCreator", fields: [creatorId], references: [id])
+
+  // Relations
+  assignees     TaskAssignee[]
+  comments      Comment[]
+  documents     TaskDocument[]
+  criteria      AcceptanceCriteria[]
+  labels        TaskLabel[]
+  activityLogs  ActivityLog[]
+
+  @@map("tasks")
+}
+
+model TaskAssignee {
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@map("task_assignees")
+}
+
+model AcceptanceCriteria {
+  id        String   @id @default(uuid())
+  text      String
+  isDone    Boolean  @default(false)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("acceptance_criteria")
+}
+
+model Label {
+  id    String @id @default(uuid())
+  name  String
+  color String @default("#64748b")
+
+  tasks TaskLabel[]
+
+  @@map("labels")
+}
+
+model TaskLabel {
+  taskId  String
+  task    Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  labelId String
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@map("task_labels")
+}
+
+// ─── COMMENT ──────────────────────────────────────────────────────────────────
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+
+  @@map("comments")
+}
+
+// ─── DOCUMENT ─────────────────────────────────────────────────────────────────
+
+model DocSpace {
+  id        String     @id @default(uuid())
+  name      String
+  icon      String     @default("📁")
+  order     Int        @default(0)
+  createdAt DateTime   @default(now())
+
+  projectId String
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  documents Document[]
+
+  @@map("doc_spaces")
+}
+
+model Document {
+  id        String    @id @default(uuid())
+  title     String
+  content   String?   @db.Text  // rich text (TipTap JSON or Markdown)
+  type      DocType   @default(OTHER)
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  spaceId   String?
+  space     DocSpace? @relation(fields: [spaceId], references: [id])
+
+  authorId  String
+  author    User      @relation(fields: [authorId], references: [id])
+
+  linkedTasks TaskDocument[]
+
+  @@map("documents")
+}
+
+model TaskDocument {
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, documentId])
+  @@map("task_documents")
+}
+
+// ─── ACTIVITY LOG ─────────────────────────────────────────────────────────────
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  action    String   // e.g. "task.created", "task.status_changed", "comment.added"
+  details   Json?
+  createdAt DateTime @default(now())
+
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("activity_logs")
+}
