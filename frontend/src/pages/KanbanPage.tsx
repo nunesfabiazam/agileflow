@@ -26,6 +26,7 @@ export function KanbanPage() {
 
   return (
     <div>
+      <SprintPanel projectId={activeProjectId} />
       <KanbanBoard
         projectId={activeProjectId}
         sprintId={activeSprint?.id}
