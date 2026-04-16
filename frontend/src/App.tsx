@@ -9,7 +9,8 @@ import { DocsPage }      from './pages/DocsPage';
 import { TeamPage }      from './pages/TeamPage';
 import { ReportsPage }   from './pages/ReportsPage';
 import { ImportPage }    from './pages/ImportPage';
-import { ProjectsPage }  from './pages/ProjectsPage';
+import { ProjectsPage }         from './pages/ProjectsPage';
+import { ProjectSettingsPage }  from './pages/ProjectSettingsPage';
 
 function AuthGuard() {
   const token = useAppStore(s => s.token);
@@ -37,7 +38,8 @@ export default function App() {
         <Route element={<AuthGuard />}>
           <Route element={<AppLayout />}>
             <Route index element={<Navigate to="/kanban" replace />} />
-            <Route path="projects"   element={<ProjectsPage />} />
+            <Route path="projects"                element={<ProjectsPage />} />
+            <Route path="projects/:id/settings" element={<ProjectSettingsPage />} />
             <Route path="kanban"     element={<KanbanPage />} />
             <Route path="backlog"    element={<BacklogPage />} />
             <Route path="dashboard"  element={<DashboardPage />} />

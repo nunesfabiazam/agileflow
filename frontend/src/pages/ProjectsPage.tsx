@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { projectsApi } from '../api';
 import { useAppStore } from '../store/useAppStore';
 import type { Project } from '../types';
@@ -8,8 +9,14 @@ const COLORS = ['#6366f1','#22c55e','#f97316','#3b82f6','#a855f7','#eab308','#ef
 
 export function ProjectsPage() {
   const { setActiveProject, addRecentProject } = useAppStore();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const qc = useQueryClient();
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(searchParams.get('new') === '1');
+
+  useEffect(() => {
+    if (searchParams.get('new') === '1') setShowCreate(true);
+  }, [searchParams]);
   const [form, setForm] = useState({ name: '', key: '', description: '', color: '#6366f1', iconEmoji: '📦' });
   const [error, setError] = useState('');
 
@@ -24,7 +31,7 @@ export function ProjectsPage() {
     onError: (e: any) => setError(e?.response?.data?.error ?? 'Erro ao criar projeto.'),
   });
 
-  const handleSelect = (p: Project) => { setActiveProject(p.id); addRecentProject(p); };
+  const handleSelect = (p: Project) => { setActiveProject(p.id); addRecentProject(p); navigate('/kanban'); };
 
   if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}><div className="spinner" /></div>;
 
