@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { tasksApi } from '../../api';
-import type { Task } from '../../types';
+import type { Task, KanbanColumn } from '../../types';
 import { Badge } from '../Shared/Badge';
 import { Avatar } from '../Shared/Avatar';
 
-interface Props { task: Task; projectId: string; onClose: () => void; }
+interface Props { task: Task; projectId: string; onClose: () => void; columns?: KanbanColumn[]; onUpdated?: () => void; }
 
 const TYPE_LABEL:     Record<string, string> = { STORY:'História', BUG:'Bug', TASK:'Task', SPIKE:'Spike', EPIC:'Épico', SUBTASK:'Subtask' };
 const PRIORITY_LABEL: Record<string, string> = { CRITICAL:'Crítica', HIGH:'Alta', MEDIUM:'Média', LOW:'Baixa' };

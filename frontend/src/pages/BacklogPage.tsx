@@ -5,7 +5,7 @@ import type { Task } from '../types';
 import { Badge } from '../components/Shared/Badge';
 import { Avatar } from '../components/Shared/Avatar';
 import { useState } from 'react';
-import { TaskDetailModal } from '../components/Kanban/TaskDetailModal';
+import { TaskDetailModal } from '../components/kanban/TaskDetailModal';
 
 const TYPE_LABEL: Record<string, string>     = { STORY:'História', BUG:'Bug', TASK:'Task', SPIKE:'Spike', EPIC:'Épico', SUBTASK:'Subtask' };
 const PRIORITY_LABEL: Record<string, string> = { CRITICAL:'Crítica', HIGH:'Alta', MEDIUM:'Média', LOW:'Baixa' };
