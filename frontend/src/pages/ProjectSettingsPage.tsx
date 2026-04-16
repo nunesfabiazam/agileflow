@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi, usersApi } from '../api';
 import { Avatar } from '../components/Shared/Avatar';
 import { useAppStore } from '../store/useAppStore';
-import type { ProjectMember } from '../types';
+import type { Project, ProjectMember, User } from '../types';
 
 const COLORS = ['#6366f1','#22c55e','#f97316','#3b82f6','#a855f7','#eab308','#ef4444','#06b6d4','#ec4899'];
 const EMOJIS = ['📦','🚀','💡','🔥','⚡','🎯','🛠️','🌟','🏆','📱','🌐','🔒','🤖','📊','🎨'];
@@ -31,39 +31,43 @@ export function ProjectSettingsPage() {
 
   const [tab, setTab] = useState<Tab>('geral');
   const [saved, setSaved] = useState(false);
-  const [name, setName]         = useState('');
-  const [desc, setDesc]         = useState('');
-  const [color, setColor]       = useState('#6366f1');
-  const [emoji, setEmoji]       = useState('📦');
+  const [name, setName]   = useState('');
+  const [desc, setDesc]   = useState('');
+  const [color, setColor] = useState('#6366f1');
+  const [emoji, setEmoji] = useState('📦');
   const [formReady, setFormReady] = useState(false);
-  const [search, setSearch]         = useState('');
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteUserId, setInviteUserId] = useState('');
-  const [inviteRole, setInviteRole]   = useState('DEVELOPER');
-  const [inviteError, setInviteError] = useState('');
 
-  const { data: project, isLoading } = useQuery({
+  const [search, setSearch]             = useState('');
+  const [showInvite, setShowInvite]     = useState(false);
+  const [inviteUserId, setInviteUserId] = useState('');
+  const [inviteRole, setInviteRole]     = useState('DEVELOPER');
+  const [inviteError, setInviteError]   = useState('');
+
+  const { data: project, isLoading } = useQuery<Project | undefined>({
     queryKey: ['project', projectId],
     queryFn: () => projectsApi.get(projectId).then(r => r.data.data),
     enabled: !!projectId,
-    onSuccess: (p: any) => {
-      if (!formReady) {
-        setName(p.name ?? '');
-        setDesc(p.description ?? '');
-        setColor(p.color ?? '#6366f1');
-        setEmoji(p.iconEmoji ?? '📦');
-        setFormReady(true);
-      }
-    },
-  } as any);
+  });
 
-  const { data: allUsers = [] } = useQuery({
+  useEffect(() => {
+    if (project && !formReady) {
+      setName(project.name ?? '');
+      setDesc(project.description ?? '');
+      setColor(project.color ?? '#6366f1');
+      setEmoji(project.iconEmoji ?? '📦');
+      setFormReady(true);
+    }
+  }, [project, formReady]);
+
+  const { data: allUsers = [] } = useQuery<User[]>({
     queryKey: ['users'],
     queryFn: () => usersApi.list().then(r => r.data.data ?? []),
   });
 
   const updateMut = useMutation({
-    mutationFn: () => projectsApi.update(projectId, { name: name.trim(), description: desc.trim() || undefined, color, iconEmoji: emoji }),
+    mutationFn: () => projectsApi.update(projectId, {
+      name: name.trim(), description: desc.trim() || undefined, color, iconEmoji: emoji,
+    }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project', projectId] });
       qc.invalidateQueries({ queryKey: ['projects'] });
@@ -87,7 +91,8 @@ export function ProjectSettingsPage() {
   });
 
   const updateRoleMut = useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: string }) => projectsApi.addMember(projectId, userId, role),
+    mutationFn: ({ userId, role }: { userId: string; role: string }) =>
+      projectsApi.addMember(projectId, userId, role),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['project', projectId] }),
   });
 
@@ -100,18 +105,22 @@ export function ProjectSettingsPage() {
     },
   });
 
-  if (!projectId) return <div className="empty-state"><div className="empty-icon">⚙️</div><div className="empty-text">Selecione um projeto para configurar.</div></div>;
-  if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}><div className="spinner" /></div>;
-  if (!project) return <div className="empty-state"><div className="empty-icon">❌</div><div className="empty-text">Projeto não encontrado.</div></div>;
-
-  const members: ProjectMember[] = project.members ?? [];
-  const memberUserIds = new Set(members.map((m: ProjectMember) => m.userId));
-  const availableUsers = (allUsers as any[]).filter(u => !memberUserIds.has(u.id));
-  const filteredMembers = members.filter((m: ProjectMember) =>
-    m.user.name.toLowerCase().includes(search.toLowerCase())
+  if (!projectId) return (
+    <div className="empty-state"><div className="empty-icon">⚙️</div><div className="empty-text">Selecione um projeto para configurar.</div></div>
+  );
+  if (isLoading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}><div className="spinner" /></div>
+  );
+  if (!project) return (
+    <div className="empty-state"><div className="empty-icon">❌</div><div className="empty-text">Projeto não encontrado.</div></div>
   );
 
-  const tabStyle = (t: Tab) => ({
+  const members: ProjectMember[] = project.members ?? [];
+  const memberUserIds = new Set(members.map(m => m.userId));
+  const availableUsers = allUsers.filter(u => !memberUserIds.has(u.id));
+  const filteredMembers = members.filter(m => m.user.name.toLowerCase().includes(search.toLowerCase()));
+
+  const tabStyle = (t: Tab): React.CSSProperties => ({
     padding: '8px 18px', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 500,
     background: tab === t ? 'var(--accent)' : 'transparent',
     color: tab === t ? '#fff' : 'var(--text2)', border: 'none', transition: 'all .15s',
@@ -166,10 +175,10 @@ export function ProjectSettingsPage() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {EMOJIS.map(e => (
                 <div key={e} onClick={() => setEmoji(e)} style={{
-                  width: 36, height: 36, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 20, cursor: 'pointer', transition: 'all .15s',
+                  width: 36, height: 36, borderRadius: 8, fontSize: 20, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: emoji === e ? 'var(--accent)' : 'var(--bg3)',
-                  boxShadow: emoji === e ? '0 0 0 2px var(--accent)' : 'none',
+                  boxShadow: emoji === e ? '0 0 0 2px var(--accent)' : 'none', transition: 'all .15s',
                 }}>{e}</div>
               ))}
             </div>
@@ -197,7 +206,7 @@ export function ProjectSettingsPage() {
             <button className="btn btn-primary btn-sm" onClick={() => setShowInvite(true)}>+ Adicionar Membro</button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {filteredMembers.map((m: ProjectMember) => (
+            {filteredMembers.map(m => (
               <div key={m.userId} className="card" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px' }}>
                 <Avatar name={m.user.name} color={m.user.color} size="md" />
                 <div style={{ flex: 1 }}>
@@ -230,8 +239,9 @@ export function ProjectSettingsPage() {
                   <label className="input-label">Usuário</label>
                   <select value={inviteUserId} onChange={e => setInviteUserId(e.target.value)} style={{ width: '100%' }}>
                     <option value="">— Selecione um usuário —</option>
-                    {availableUsers.map((u: any) => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
+                    {availableUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
                   </select>
+                  {availableUsers.length === 0 && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>Todos os usuários já são membros.</div>}
                 </div>
                 <div className="input-group">
                   <label className="input-label">Papel no Projeto</label>
