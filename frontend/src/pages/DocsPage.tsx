@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { documentsApi } from '../api';
-import type { Document } from '../types';
+import type { Document, DocType } from '../types';
 import { Avatar } from '../components/Shared/Avatar';
 
 const DOC_ICON: Record<string, string> = {
@@ -20,7 +20,7 @@ export function DocsPage() {
   const [activeSpaceId, setActiveSpaceId] = useState<string | 'all'>('all');
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [newDoc, setNewDoc] = useState({ title: '', type: 'SPEC', content: '' });
+  const [newDoc, setNewDoc] = useState<{ title: string; type: DocType; content: string }>({ title: '', type: 'SPEC', content: '' });
 
   const { data: spaces = [] } = useQuery({
     queryKey: ['spaces', activeProjectId],
@@ -113,7 +113,7 @@ export function DocsPage() {
               </div>
               <div className="input-group">
                 <label className="input-label">Tipo</label>
-                <select style={{ width: '100%' }} value={newDoc.type} onChange={e => setNewDoc(d => ({ ...d, type: e.target.value }))}>
+                <select style={{ width: '100%' }} value={newDoc.type} onChange={e => setNewDoc(d => ({ ...d, type: e.target.value as DocType }))}>
                   {Object.entries(DOC_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </div>

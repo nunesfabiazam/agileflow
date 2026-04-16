@@ -34,6 +34,7 @@ export interface Project {
 export interface ProjectMember {
   userId: string;
   role: UserRole;
+  joinedAt?: string;
   user: Pick<User, 'id' | 'name' | 'color' | 'role' | 'avatarUrl'>;
 }
 
@@ -105,7 +106,7 @@ export interface Task {
   order: number;
   createdAt: string;
   updatedAt: string;
-  column?: Pick<KanbanColumn, 'id' | 'name' | 'color'>;
+  column?: Pick<KanbanColumn, 'id' | 'name' | 'color' | 'isDefault'>;
   sprint?: Pick<Sprint, 'id' | 'name'>;
   epic?: Pick<Epic, 'id' | 'title' | 'color'>;
   creator: Pick<User, 'id' | 'name' | 'color'>;

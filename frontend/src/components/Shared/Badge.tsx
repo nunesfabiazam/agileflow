@@ -21,3 +21,11 @@ export function Badge({ type, value }: Props) {
   if (!entry) return null;
   return <span className={`badge ${entry.cls}`}>{entry.label}</span>;
 }
+
+export function TypeBadge({ value, type }: { value?: string; type?: string }) {
+  return <Badge type="type" value={(value ?? type) || ''} />;
+}
+
+export function PriorityBadge({ value, priority }: { value?: string; priority?: string }) {
+  return <Badge type="priority" value={(value ?? priority) || ''} />;
+}
