@@ -24,8 +24,8 @@ router.get('/sprint/:sprintId', async (req: AuthRequest, res: Response) => {
 
   const total   = sprint.tasks.reduce((a, t) => a + (t.storyPoints ?? 0), 0);
   const done    = sprint.tasks.filter(t => t.column?.isDefault).reduce((a, t) => a + (t.storyPoints ?? 0), 0);
-  const byType  = groupBy(sprint.tasks, t => t.type);
-  const byPrio  = groupBy(sprint.tasks, t => t.priority);
+  const byType  = groupBy(sprint.tasks, (t: any) => t.type as string);
+  const byPrio  = groupBy(sprint.tasks, (t: any) => t.priority as string);
 
   // Team productivity
   const teamMap: Record<string, { name: string; color: string; tasks: number; points: number; completed: number }> = {};
