@@ -4,6 +4,7 @@ import { tasksApi } from '../../api';
 import type { Task, KanbanColumn } from '../../types';
 import { Badge } from '../Shared/Badge';
 import { Avatar } from '../Shared/Avatar';
+import { TaskFormModal } from './TaskFormModal';
 
 interface Props { task: Task; projectId: string; onClose: () => void; columns?: KanbanColumn[]; onUpdated?: () => void; }
 
@@ -13,10 +14,19 @@ const PRIORITY_LABEL: Record<string, string> = { CRITICAL:'Crítica', HIGH:'Alta
 export function TaskDetailModal({ task, projectId, onClose }: Props) {
   const qc = useQueryClient();
   const [comment, setComment] = useState('');
+  const [showEdit, setShowEdit] = useState(false);
+  const [newCriterion, setNewCriterion] = useState('');
 
   const criterionMut = useMutation({
     mutationFn: ({ cid, isDone }: { cid: string; isDone: boolean }) => tasksApi.updateCriteria(task.id, cid, isDone),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks', projectId] }),
+  });
+
+  const addCriterionMut = useMutation({
+    mutationFn: () => tasksApi.update(task.id, {
+      criteria: [...(task.criteria ?? []).map(c => ({ text: c.text, isDone: c.isDone })), { text: newCriterion.trim(), isDone: false }] as any
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks', projectId] }); setNewCriterion(''); },
   });
 
   const commentMut = useMutation({
@@ -26,6 +36,10 @@ export function TaskDetailModal({ task, projectId, onClose }: Props) {
 
   const doneCriteria = (task.criteria ?? []).filter(c => c.isDone).length;
   const totalCriteria = (task.criteria ?? []).length;
+
+  if (showEdit) return (
+    <TaskFormModal projectId={projectId} task={task} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); qc.invalidateQueries({ queryKey: ['tasks', projectId] }); }} />
+  );
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -145,7 +159,7 @@ export function TaskDetailModal({ task, projectId, onClose }: Props) {
             )}
 
             <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>✏️ Editar Task</button>
+              <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowEdit(true)}>✏️ Editar Task</button>
               <button className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center' }}>📄 Vincular Doc</button>
             </div>
           </div>

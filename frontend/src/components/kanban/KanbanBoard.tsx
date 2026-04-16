@@ -6,6 +6,7 @@ import type { Task, KanbanColumn } from '../../types';
 import { KanbanColumnComp } from './KanbanColumn';
 import { TaskCard } from './TaskCard';
 import { TaskDetailModal } from './TaskDetailModal';
+import { TaskFormModal } from './TaskFormModal';
 import { AddColumnModal } from './AddColumnModal';
 
 interface Props { projectId: string; sprintId?: string; sprintName?: string; }
@@ -15,6 +16,7 @@ export function KanbanBoard({ projectId, sprintId, sprintName: _sprintName }: Pr
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showAddCol, setShowAddCol] = useState(false);
+  const [showNewTask, setShowNewTask] = useState(false);
   const [editingColId, setEditingColId] = useState<string | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -78,7 +80,7 @@ export function KanbanBoard({ projectId, sprintId, sprintName: _sprintName }: Pr
         <h2>Kanban {sprintId ? '' : '— Backlog Geral'}</h2>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           <button className="btn btn-ghost btn-sm" onClick={() => setShowAddCol(true)}>＋ Nova Coluna</button>
-          <button className="btn btn-primary btn-sm" onClick={() => setSelectedTask({} as Task)}>＋ Nova Task</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowNewTask(true)}>＋ Nova Task</button>
         </div>
       </div>
 
@@ -125,6 +127,15 @@ export function KanbanBoard({ projectId, sprintId, sprintName: _sprintName }: Pr
           projectId={projectId}
           onClose={() => setShowAddCol(false)}
           onCreated={() => { setShowAddCol(false); qc.invalidateQueries({ queryKey: ['columns', projectId] }); }}
+        />
+      )}
+
+      {showNewTask && (
+        <TaskFormModal
+          projectId={projectId}
+          defaultColumnId={cols[0]?.id}
+          onClose={() => setShowNewTask(false)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['tasks', projectId] })}
         />
       )}
 
