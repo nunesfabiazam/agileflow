@@ -8,9 +8,9 @@ import { TaskCard } from './TaskCard';
 import { TaskDetailModal } from './TaskDetailModal';
 import { AddColumnModal } from './AddColumnModal';
 
-interface Props { projectId: string; sprintId?: string; }
+interface Props { projectId: string; sprintId?: string; sprintName?: string; }
 
-export function KanbanBoard({ projectId, sprintId }: Props) {
+export function KanbanBoard({ projectId, sprintId, sprintName: _sprintName }: Props) {
   const qc = useQueryClient();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
