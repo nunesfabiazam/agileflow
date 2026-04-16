@@ -1,5 +1,6 @@
 import { useAppStore } from '../store/useAppStore';
 import { KanbanBoard } from '../components/kanban/KanbanBoard';
+import { SprintPanel } from '../components/Kanban/SprintPanel';
 import { useQuery } from '@tanstack/react-query';
 import { sprintsApi } from '../api';
 
