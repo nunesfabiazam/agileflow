@@ -37,6 +37,8 @@ export const tasksApi = {
   reorder:        (updates: Array<{ id: string; columnId: string; order: number }>) => api.post('/tasks/reorder', { updates }),
   addComment:     (id: string, content: string) => api.post(`/tasks/${id}/comments`, { content }),
   updateCriteria: (taskId: string, criterionId: string, isDone: boolean) => api.patch(`/tasks/${taskId}/criteria/${criterionId}`, { isDone }),
+  linkDoc:        (taskId: string, documentId: string) => api.post(`/tasks/${taskId}/documents`, { documentId }),
+  unlinkDoc:      (taskId: string, documentId: string) => api.delete(`/tasks/${taskId}/documents/${documentId}`),
 };
 
 // ─── Sprints ──────────────────────────────────────────────────────────────────

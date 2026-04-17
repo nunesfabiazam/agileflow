@@ -170,6 +170,30 @@ router.patch('/:id/criteria/:criterionId', async (req: AuthRequest, res: Respons
   res.json({ success: true, data: criterion });
 });
 
+// POST /api/tasks/:id/documents — link a document to a task
+router.post('/:id/documents', async (req: AuthRequest, res: Response) => {
+  const { documentId } = req.body;
+  if (!documentId) { res.status(400).json({ success: false, error: 'documentId obrigatório.' }); return; }
+  try {
+    await prisma.taskDocument.create({ data: { taskId: req.params.id, documentId } });
+    res.status(201).json({ success: true });
+  } catch {
+    res.status(409).json({ success: false, error: 'Documento já vinculado a esta task.' });
+  }
+});
+
+// DELETE /api/tasks/:id/documents/:documentId — unlink a document from a task
+router.delete('/:id/documents/:documentId', async (req: AuthRequest, res: Response) => {
+  try {
+    await prisma.taskDocument.delete({
+      where: { taskId_documentId: { taskId: req.params.id, documentId: req.params.documentId } },
+    });
+    res.json({ success: true });
+  } catch {
+    res.status(404).json({ success: false, error: 'Vínculo não encontrado.' });
+  }
+});
+
 // POST /api/tasks/reorder — update column + order for multiple tasks (kanban drag)
 router.post('/reorder', async (req: AuthRequest, res: Response) => {
   const { updates } = req.body as { updates: Array<{ id: string; columnId: string; order: number }> };
