@@ -5,7 +5,7 @@ import type { Task, Sprint } from '../types';
 import { Badge } from '../components/Shared/Badge';
 import { Avatar } from '../components/Shared/Avatar';
 import { useState } from 'react';
-import { TaskDetailModal } from '../components/Kanban/TaskDetailModal';
+import { TaskDetailModal } from '../components/kanban/TaskDetailModal';
 
 const STATUS_LABEL: Record<string, string> = {
   PLANNING: 'Planejado', ACTIVE: 'Ativa', COMPLETED: 'Concluída', CANCELLED: 'Cancelada',
