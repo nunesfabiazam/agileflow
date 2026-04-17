@@ -10,6 +10,7 @@ const NAV = [
   { path: '/dashboard',  icon: '📊', label: 'Dashboard'    },
   { path: '/kanban',     icon: '🗂️',  label: 'Kanban'       },
   { path: '/backlog',    icon: '📋', label: 'Backlog'       },
+  { path: '/epics',       icon: '🏔️', label: 'Épicos'       },
   { path: '/documents',  icon: '📄', label: 'Documentação' },
   { path: '/team',       icon: '👥', label: 'Time'          },
   { path: '/reports',    icon: '📈', label: 'Relatórios'   },
