@@ -11,8 +11,8 @@ router.use(authenticate as any);
 const SprintSchema = z.object({
   name:      z.string().min(1),
   goal:      z.string().optional(),
-  startDate: z.string().datetime().optional(),
-  endDate:   z.string().datetime().optional(),
+  startDate: z.string().optional(),
+  endDate:   z.string().optional(),
   projectId: z.string().uuid(),
 });
 

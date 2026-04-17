@@ -12,8 +12,8 @@ const EpicSchema = z.object({
   title:       z.string().min(1).max(300),
   description: z.string().optional(),
   color:       z.string().default('#6366f1'),
-  startDate:   z.string().datetime().optional(),
-  dueDate:     z.string().datetime().optional(),
+  startDate:   z.string().optional(),
+  dueDate:     z.string().optional(),
   projectId:   z.string().uuid(),
 });
 
