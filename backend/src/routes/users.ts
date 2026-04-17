@@ -22,7 +22,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
   if (req.user!.userId !== req.params.id && req.user!.role !== 'ADMIN') {
     res.status(403).json({ success: false, error: 'Sem permissão.' }); return;
   }
-  const { name, color, avatarUrl, role } = req.body;
+  const { name, color, avatarUrl, role, isActive } = req.body;
   const user = await prisma.user.update({
     where: { id: req.params.id },
     data: {
@@ -30,6 +30,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       ...(color     && { color }),
       ...(avatarUrl !== undefined && { avatarUrl }),
       ...(role && req.user!.role === 'ADMIN' && { role }),
+      ...(isActive !== undefined && req.user!.role === 'ADMIN' && { isActive }),
     },
     select: { id: true, name: true, email: true, role: true, color: true, avatarUrl: true },
   });
