@@ -1,16 +1,17 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAppStore } from './store/useAppStore';
 import { Sidebar } from './components/Layout/Sidebar';
-import { LoginPage }     from './pages/LoginPage';
-import { KanbanPage }    from './pages/KanbanPage';
-import { BacklogPage }   from './pages/BacklogPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { DocsPage }      from './pages/DocsPage';
-import { TeamPage }      from './pages/TeamPage';
-import { ReportsPage }   from './pages/ReportsPage';
-import { ImportPage }    from './pages/ImportPage';
-import { ProjectsPage }         from './pages/ProjectsPage';
-import { ProjectSettingsPage }  from './pages/ProjectSettingsPage';
+import { LoginPage }           from './pages/LoginPage';
+import { KanbanPage }          from './pages/KanbanPage';
+import { BacklogPage }         from './pages/BacklogPage';
+import { DashboardPage }       from './pages/DashboardPage';
+import { DocsPage }            from './pages/DocsPage';
+import { DocEditorPage }       from './pages/DocEditorPage';
+import { TeamPage }            from './pages/TeamPage';
+import { ReportsPage }         from './pages/ReportsPage';
+import { ImportPage }          from './pages/ImportPage';
+import { ProjectsPage }        from './pages/ProjectsPage';
+import { ProjectSettingsPage } from './pages/ProjectSettingsPage';
 
 function AuthGuard() {
   const token = useAppStore(s => s.token);
@@ -19,12 +20,21 @@ function AuthGuard() {
 
 function AppLayout() {
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div style={{ display:'flex', height:'100vh', overflow:'hidden' }}>
       <Sidebar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <main style={{ flex: 1, overflow: 'auto', padding: 24 }}>
-          <Outlet />
-        </main>
+      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+        <main style={{ flex:1, overflow:'auto', padding:24 }}><Outlet /></main>
+      </div>
+    </div>
+  );
+}
+
+function EditorLayout() {
+  return (
+    <div style={{ display:'flex', height:'100vh', overflow:'hidden' }}>
+      <Sidebar />
+      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+        <Outlet />
       </div>
     </div>
   );
@@ -36,17 +46,20 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<AuthGuard />}>
+          <Route element={<EditorLayout />}>
+            <Route path="documents/:id" element={<DocEditorPage />} />
+          </Route>
           <Route element={<AppLayout />}>
             <Route index element={<Navigate to="/kanban" replace />} />
-            <Route path="projects"                element={<ProjectsPage />} />
+            <Route path="projects"              element={<ProjectsPage />} />
             <Route path="projects/:id/settings" element={<ProjectSettingsPage />} />
-            <Route path="kanban"     element={<KanbanPage />} />
-            <Route path="backlog"    element={<BacklogPage />} />
-            <Route path="dashboard"  element={<DashboardPage />} />
-            <Route path="documents"  element={<DocsPage />} />
-            <Route path="team"       element={<TeamPage />} />
-            <Route path="reports"    element={<ReportsPage />} />
-            <Route path="import"     element={<ImportPage />} />
+            <Route path="kanban"                element={<KanbanPage />} />
+            <Route path="backlog"               element={<BacklogPage />} />
+            <Route path="dashboard"             element={<DashboardPage />} />
+            <Route path="documents"             element={<DocsPage />} />
+            <Route path="team"                  element={<TeamPage />} />
+            <Route path="reports"               element={<ReportsPage />} />
+            <Route path="import"                element={<ImportPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

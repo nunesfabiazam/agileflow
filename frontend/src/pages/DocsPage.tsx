@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { documentsApi } from '../api';
-import type { Document, DocType } from '../types';
 import { Avatar } from '../components/Shared/Avatar';
+import type { Document, DocType, DocSpace } from '../types';
 
 const DOC_ICON: Record<string, string> = {
   SPEC:'📋', DIAGRAM:'🗺️', DESIGN:'🎨', REFERENCE:'📚',
@@ -13,87 +14,130 @@ const DOC_LABEL: Record<string, string> = {
   SPEC:'Spec', DIAGRAM:'Diagrama', DESIGN:'Design', REFERENCE:'Referência',
   TEMPLATE:'Template', TEST_PLAN:'Plano de Testes', WIREFRAME:'Wireframe', RUNBOOK:'Runbook', OTHER:'Outro',
 };
+const DOC_TYPES = Object.keys(DOC_LABEL) as DocType[];
+const SPACE_ICONS = ['📁','🚀','💡','🛠️','🧪','📊','🎨','🔒','📋','🌐'];
 
 export function DocsPage() {
+  const navigate = useNavigate();
   const activeProjectId = useAppStore(s => s.activeProjectId);
   const qc = useQueryClient();
+
   const [activeSpaceId, setActiveSpaceId] = useState<string | 'all'>('all');
-  const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
+  const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const [newDoc, setNewDoc] = useState<{ title: string; type: DocType; content: string }>({ title: '', type: 'SPEC', content: '' });
+  const [showNewSpace, setShowNewSpace] = useState(false);
+  const [newDoc, setNewDoc] = useState({ title: '', type: 'SPEC' as DocType });
+  const [newSpace, setNewSpace] = useState({ name: '', icon: '📁' });
 
-  const { data: spaces = [] } = useQuery({
+  const { data: spaces = [] } = useQuery<DocSpace[]>({
     queryKey: ['spaces', activeProjectId],
-    queryFn: () => documentsApi.listSpaces(activeProjectId!).then(r => r.data.data ?? []),
-    enabled: !!activeProjectId,
+    queryFn:  () => documentsApi.listSpaces(activeProjectId!).then(r => r.data.data ?? []),
+    enabled:  !!activeProjectId,
   });
 
-  const { data: docs = [] } = useQuery({
+  const { data: docs = [] } = useQuery<Document[]>({
     queryKey: ['docs', activeProjectId, activeSpaceId],
-    queryFn: () => documentsApi.list({ projectId: activeProjectId!, ...(activeSpaceId !== 'all' ? { spaceId: activeSpaceId } : {}) }).then(r => r.data.data ?? []),
+    queryFn:  () => documentsApi.list({
+      projectId: activeProjectId!,
+      ...(activeSpaceId !== 'all' ? { spaceId: activeSpaceId } : {}),
+    }).then(r => r.data.data ?? []),
     enabled: !!activeProjectId,
   });
 
-  const createMut = useMutation({
-    mutationFn: () => documentsApi.create({ ...newDoc, projectId: activeProjectId!, ...(activeSpaceId !== 'all' ? { spaceId: activeSpaceId } : {}) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['docs', activeProjectId] }); setShowCreate(false); setNewDoc({ title: '', type: 'SPEC', content: '' }); },
+  const createDocMut = useMutation({
+    mutationFn: () => documentsApi.create({
+      title: newDoc.title.trim(), type: newDoc.type, content: '', projectId: activeProjectId!,
+      ...(activeSpaceId !== 'all' ? { spaceId: activeSpaceId } : {}),
+    }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['docs', activeProjectId] });
+      setShowCreate(false); setNewDoc({ title: '', type: 'SPEC' });
+      const created = res.data.data;
+      if (created?.id) navigate(`/documents/${created.id}`);
+    },
+  });
+
+  const createSpaceMut = useMutation({
+    mutationFn: () => documentsApi.createSpace({ name: newSpace.name.trim(), icon: newSpace.icon, projectId: activeProjectId! }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['spaces', activeProjectId] }); setShowNewSpace(false); setNewSpace({ name: '', icon: '📁' }); },
   });
 
   const removeMut = useMutation({
-    mutationFn: documentsApi.remove,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['docs', activeProjectId] }); setSelectedDoc(null); },
+    mutationFn: (id: string) => documentsApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['docs', activeProjectId] }),
   });
 
-  if (!activeProjectId) return <div className="empty-state"><div className="empty-icon">📄</div><div className="empty-text">Selecione um projeto para ver a documentação.</div></div>;
+  if (!activeProjectId) return (
+    <div className="empty-state">
+      <div className="empty-icon">📄</div>
+      <div className="empty-text">Selecione um projeto para acessar a documentação.</div>
+    </div>
+  );
 
-  const filtered = docs as Document[];
+  const filtered = (docs as Document[]).filter(d => !search || d.title.toLowerCase().includes(search.toLowerCase()));
+  const activeSpace = (spaces as DocSpace[]).find(s => s.id === activeSpaceId);
 
   return (
-    <div style={{ display: 'flex', gap: 20, height: 'calc(100vh - 96px)' }}>
+    <div style={{ display:'flex', gap:0, height:'calc(100vh - 96px)', margin:-24 }}>
+
       {/* Spaces sidebar */}
-      <div style={{ width: 200, flexShrink: 0 }}>
-        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text3)', fontWeight: 600, marginBottom: 8 }}>Espaços</div>
-        <div className={`nav-item ${activeSpaceId === 'all' ? 'active' : ''}`} onClick={() => setActiveSpaceId('all')}>
-          <span>📁</span><span>Todos</span>
+      <div style={{ width:220, flexShrink:0, borderRight:'1px solid var(--border)', background:'var(--bg2)', display:'flex', flexDirection:'column', padding:'16px 10px' }}>
+        <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--text3)', marginBottom:10, padding:'0 6px' }}>Espaços</div>
+        <div className={`nav-item ${activeSpaceId==='all'?'active':''}`} onClick={() => setActiveSpaceId('all')}>
+          <span>📁</span><span style={{ flex:1 }}>Todos os Docs</span><span style={{ fontSize:11, color:'var(--text3)' }}>{docs.length}</span>
         </div>
-        {(spaces as any[]).map(sp => (
-          <div key={sp.id} className={`nav-item ${activeSpaceId === sp.id ? 'active' : ''}`} onClick={() => setActiveSpaceId(sp.id)}>
-            <span>{sp.icon}</span><span>{sp.name}</span>
+        {(spaces as DocSpace[]).map(sp => (
+          <div key={sp.id} className={`nav-item ${activeSpaceId===sp.id?'active':''}`} onClick={() => setActiveSpaceId(sp.id)}>
+            <span>{sp.icon ?? '📁'}</span><span style={{ flex:1 }}>{sp.name}</span><span style={{ fontSize:11, color:'var(--text3)' }}>{sp._count?.documents ?? 0}</span>
           </div>
         ))}
+        <div style={{ marginTop:'auto', paddingTop:12, borderTop:'1px solid var(--border)' }}>
+          <button className="btn btn-ghost btn-sm" style={{ width:'100%', fontSize:12, justifyContent:'center' }} onClick={() => setShowNewSpace(true)}>+ Novo Espaço</button>
+        </div>
       </div>
 
-      {/* Docs list */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      {/* Main */}
+      <div style={{ flex:1, overflow:'auto', padding:24 }}>
         <div className="page-header">
-          <h2>Documentação</h2>
-          <div style={{ marginLeft: 'auto' }}>
+          <div>
+            <h2 style={{ margin:0 }}>{activeSpaceId==='all' ? '📄 Documentação' : `${activeSpace?.icon ?? '📁'} ${activeSpace?.name}`}</h2>
+            {activeSpaceId !== 'all' && <div style={{ fontSize:12, color:'var(--text3)', marginTop:2 }}>{filtered.length} documento{filtered.length!==1?'s':''}</div>}
+          </div>
+          <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
+            <input placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} style={{ width:200, fontSize:13 }} />
             <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>+ Novo Documento</button>
           </div>
         </div>
 
         {filtered.length === 0 ? (
-          <div className="empty-state"><div className="empty-icon">📝</div><div className="empty-text">Nenhum documento ainda.</div><div className="empty-sub">Crie o primeiro documento deste projeto.</div></div>
+          <div className="empty-state">
+            <div className="empty-icon">📝</div>
+            <div className="empty-text">{search ? `Nenhum resultado para "${search}".` : 'Nenhum documento ainda.'}</div>
+            {!search && <button className="btn btn-primary" style={{ marginTop:16 }} onClick={() => setShowCreate(true)}>Criar Primeiro Documento</button>}
+          </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:14 }}>
             {filtered.map(doc => (
-              <div key={doc.id} className="card" style={{ cursor: 'pointer', transition: 'all .15s' }}
-                onClick={() => setSelectedDoc(doc)}
-                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.transform = ''; }}>
-                <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-                  <span style={{ fontSize: 24 }}>{DOC_ICON[doc.type] ?? '📄'}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{doc.title}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>{DOC_LABEL[doc.type]} · {new Date(doc.updatedAt!).toLocaleDateString('pt-BR')}</div>
+              <div key={doc.id} className="card" style={{ cursor:'pointer', transition:'all .15s', position:'relative' }}
+                onClick={() => navigate(`/documents/${doc.id}`)}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor='var(--accent)'; (e.currentTarget as HTMLDivElement).style.transform='translateY(-2px)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor='var(--border)'; (e.currentTarget as HTMLDivElement).style.transform=''; }}>
+                <button onClick={e => { e.stopPropagation(); if(confirm(`Excluir "${doc.title}"?`)) removeMut.mutate(doc.id); }}
+                  style={{ position:'absolute', top:10, right:10, color:'var(--text3)', fontSize:13, padding:'2px 6px', borderRadius:4, background:'var(--bg4)', opacity:0, transition:'opacity .15s' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity='1'}
+                  onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity='0'}>✕</button>
+                <div style={{ display:'flex', gap:10, marginBottom:10 }}>
+                  <span style={{ fontSize:26 }}>{DOC_ICON[doc.type]??'📄'}</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:600, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{doc.title}</div>
+                    <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{DOC_LABEL[doc.type]} · v{doc.version} · {new Date(doc.updatedAt).toLocaleDateString('pt-BR')}</div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Avatar name={doc.author?.name ?? '?'} color={doc.author?.color ?? '#6366f1'} size="sm" />
-                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>{doc.author?.name}</span>
-                  {(doc.linkedTasks as any[])?.length > 0 && (
-                    <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--accent2)' }}>🔗 {(doc.linkedTasks as any[]).length} tasks</span>
-                  )}
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8 }}>
+                  <Avatar name={doc.author?.name??'?'} color={doc.author?.color??'#6366f1'} size="sm" />
+                  <span style={{ fontSize:12, color:'var(--text3)', flex:1 }}>{doc.author?.name}</span>
+                  {doc.space && <span style={{ fontSize:11, color:'var(--accent2)', background:'rgba(99,102,241,.1)', padding:'1px 8px', borderRadius:10 }}>{doc.space.name}</span>}
+                  {(doc.linkedTasks as any[])?.length>0 && <span style={{ fontSize:11, color:'var(--text3)' }}>🔗 {(doc.linkedTasks as any[]).length}</span>}
                 </div>
               </div>
             ))}
@@ -101,52 +145,60 @@ export function DocsPage() {
         )}
       </div>
 
-      {/* Create modal */}
       {showCreate && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowCreate(false)}>
-          <div className="modal" style={{ width: 560, padding: 28 }}>
-            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 20 }}>Novo Documento</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div className="input-group">
-                <label className="input-label">Título</label>
-                <input style={{ width: '100%' }} placeholder="Ex: Spec de Autenticação" value={newDoc.title} onChange={e => setNewDoc(d => ({ ...d, title: e.target.value }))} />
-              </div>
-              <div className="input-group">
-                <label className="input-label">Tipo</label>
-                <select style={{ width: '100%' }} value={newDoc.type} onChange={e => setNewDoc(d => ({ ...d, type: e.target.value as DocType }))}>
-                  {Object.entries(DOC_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
-              </div>
-              <div className="input-group">
-                <label className="input-label">Conteúdo (Markdown)</label>
-                <textarea rows={8} style={{ width: '100%', resize: 'vertical', fontFamily: 'monospace', fontSize: 12 }} placeholder="# Título&#10;&#10;Escreva aqui o conteúdo do documento..." value={newDoc.content} onChange={e => setNewDoc(d => ({ ...d, content: e.target.value }))} />
-              </div>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancelar</button>
-                <button className="btn btn-primary" onClick={() => createMut.mutate()} disabled={!newDoc.title.trim()}>Criar Documento</button>
-              </div>
+        <div className="modal-overlay" onClick={e => e.target===e.currentTarget && setShowCreate(false)}>
+          <div className="modal" style={{ width:480, padding:28 }}>
+            <div style={{ fontWeight:700, fontSize:16, marginBottom:20 }}>📝 Novo Documento</div>
+            <div className="input-group">
+              <label className="input-label">Título</label>
+              <input autoFocus style={{ width:'100%' }} placeholder="Ex: Spec de Autenticação" value={newDoc.title}
+                onChange={e => setNewDoc(d => ({ ...d, title:e.target.value }))}
+                onKeyDown={e => e.key==='Enter' && newDoc.title.trim() && createDocMut.mutate()} />
+            </div>
+            <div className="input-group">
+              <label className="input-label">Tipo</label>
+              <select style={{ width:'100%' }} value={newDoc.type} onChange={e => setNewDoc(d => ({ ...d, type:e.target.value as DocType }))}>
+                {DOC_TYPES.map(k => <option key={k} value={k}>{DOC_ICON[k]} {DOC_LABEL[k]}</option>)}
+              </select>
+            </div>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
+              <button className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={() => createDocMut.mutate()} disabled={!newDoc.title.trim()||createDocMut.isPending}>
+                {createDocMut.isPending ? 'Criando...' : 'Criar e Abrir Editor'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Doc detail modal */}
-      {selectedDoc && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSelectedDoc(null)}>
-          <div className="modal" style={{ width: 720, padding: 28, overflow: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 20 }}>
-              <span style={{ fontSize: 28 }}>{DOC_ICON[selectedDoc.type] ?? '📄'}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 18 }}>{selectedDoc.title}</div>
-                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>{DOC_LABEL[selectedDoc.type]} · v{selectedDoc.version} · Atualizado {new Date(selectedDoc.updatedAt!).toLocaleDateString('pt-BR')}</div>
+      {showNewSpace && (
+        <div className="modal-overlay" onClick={e => e.target===e.currentTarget && setShowNewSpace(false)}>
+          <div className="modal" style={{ width:380, padding:28 }}>
+            <div style={{ fontWeight:700, fontSize:16, marginBottom:20 }}>📁 Novo Espaço</div>
+            <div className="input-group">
+              <label className="input-label">Nome</label>
+              <input autoFocus style={{ width:'100%' }} placeholder="Ex: Engenharia, Produto..." value={newSpace.name}
+                onChange={e => setNewSpace(s => ({ ...s, name:e.target.value }))}
+                onKeyDown={e => e.key==='Enter' && newSpace.name.trim() && createSpaceMut.mutate()} />
+            </div>
+            <div className="input-group">
+              <label className="input-label">Ícone</label>
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                {SPACE_ICONS.map(ic => (
+                  <div key={ic} onClick={() => setNewSpace(s => ({ ...s, icon:ic }))} style={{
+                    width:36, height:36, borderRadius:8, fontSize:18, cursor:'pointer',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    background: newSpace.icon===ic ? 'var(--accent)' : 'var(--bg3)',
+                    boxShadow: newSpace.icon===ic ? '0 0 0 2px var(--accent)' : 'none',
+                  }}>{ic}</div>
+                ))}
               </div>
-              <button style={{ color: 'var(--text3)', fontSize: 20, padding: 4 }} onClick={() => setSelectedDoc(null)}>✕</button>
             </div>
-            <div style={{ background: 'var(--bg3)', borderRadius: 8, padding: 16, minHeight: 200, fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
-              {selectedDoc.content ?? '(sem conteúdo)'}
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-              <button className="btn btn-danger btn-sm" onClick={() => removeMut.mutate(selectedDoc.id)}>🗑 Excluir</button>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
+              <button className="btn btn-ghost" onClick={() => setShowNewSpace(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={() => createSpaceMut.mutate()} disabled={!newSpace.name.trim()||createSpaceMut.isPending}>
+                {createSpaceMut.isPending ? 'Criando...' : 'Criar Espaço'}
+              </button>
             </div>
           </div>
         </div>
