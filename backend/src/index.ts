@@ -52,8 +52,8 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ success: false, error: err.message || 'Internal Server Error' });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 AgileFlow API running on http://localhost:${PORT}`);
+app.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`🚀 AgileFlow API running on port ${PORT}`);
 });
 
 export default app;

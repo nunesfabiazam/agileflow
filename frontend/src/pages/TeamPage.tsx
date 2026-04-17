@@ -426,7 +426,7 @@ export function TeamPage() {
             <div style={{ padding: '0 24px 24px' }}>
               <div style={{ marginTop: -30, marginBottom: 12 }}>
                 <Avatar name={profileMember.user.name} color={editMode ? editColor : profileMember.user.color}
-                  avatarUrl={profileMember.user.avatarUrl} size="xl" />
+                  avatarUrl={profileMember.user.avatarUrl} size="lg" />
               </div>
 
               {editMode ? (
