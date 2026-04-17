@@ -136,6 +136,7 @@ export interface Document {
   createdAt: string;
   updatedAt: string;
   space?: Pick<DocSpace, 'id' | 'name'>;
+  spaceId?: string;
   author: Pick<User, 'id' | 'name' | 'color'>;
   linkedTasks?: Array<{ task: Pick<Task, 'id' | 'taskKey' | 'title'> }>;
 }
