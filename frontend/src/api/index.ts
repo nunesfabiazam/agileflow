@@ -82,6 +82,15 @@ export const reportsApi = {
   project: (projectId: string) => api.get(`/reports/project/${projectId}`),
 };
 
+// ─── Search ───────────────────────────────────────────────────────────────────
+export const searchApi = {
+  search: (q: string, projectId?: string) =>
+    api.get<ApiResponse<{ tasks: any[]; documents: any[]; epics: any[] }>>(
+      '/search',
+      { params: { q, ...(projectId ? { projectId } : {}) } }
+    ),
+};
+
 // ─── Import ───────────────────────────────────────────────────────────────────
 export const importApi = {
   document: (file: File, projectId: string, spaceId?: string) => {
