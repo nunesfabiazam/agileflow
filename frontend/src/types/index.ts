@@ -115,7 +115,9 @@ export interface Task {
   comments?: TaskComment[];
   documents?: Array<{ document: Pick<Document, 'id' | 'title' | 'type'> }>;
   subtasks?: Array<Pick<Task, 'id' | 'taskKey' | 'title' | 'type' | 'priority'> & { column?: Pick<KanbanColumn, 'name'> }>;
-  _count?: { comments: number; subtasks: number; documents: number };
+  _count?: { comments: number; subtasks: number; documents: number; blockedBy: number };
+  blocks?: Array<{ id: string; blocked: Pick<Task, 'id' | 'taskKey' | 'title' | 'type' | 'priority' | 'isClosed'> & { column?: Pick<KanbanColumn, 'name'> } }>;
+  blockedBy?: Array<{ id: string; blocker: Pick<Task, 'id' | 'taskKey' | 'title' | 'type' | 'priority' | 'isClosed'> & { column?: Pick<KanbanColumn, 'name'> } }>;
 }
 
 // ─── Document ─────────────────────────────────────────────────────────────────

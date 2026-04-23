@@ -39,6 +39,8 @@ export const tasksApi = {
   updateCriteria: (taskId: string, criterionId: string, isDone: boolean) => api.patch(`/tasks/${taskId}/criteria/${criterionId}`, { isDone }),
   linkDoc:        (taskId: string, documentId: string) => api.post(`/tasks/${taskId}/documents`, { documentId }),
   unlinkDoc:      (taskId: string, documentId: string) => api.delete(`/tasks/${taskId}/documents/${documentId}`),
+  addDependency:    (blockerId: string, blockedId: string) => api.post(`/tasks/${blockerId}/dependencies`, { blockedId }),
+  removeDependency: (taskId: string, depId: string) => api.delete(`/tasks/${taskId}/dependencies/${depId}`),
 };
 
 // ─── Sprints ──────────────────────────────────────────────────────────────────

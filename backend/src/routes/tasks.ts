@@ -35,7 +35,7 @@ const taskSelect = {
   creator:{ select: { id: true, name: true, color: true } },
   assignees: { select: { user: { select: { id: true, name: true, color: true, avatarUrl: true } } } },
   criteria: { select: { id: true, text: true, isDone: true, order: true }, orderBy: { order: 'asc' as const } },
-  _count: { select: { comments: true, subtasks: true, documents: true } },
+  _count: { select: { comments: true, subtasks: true, documents: true, blockedBy: true } },
 };
 
 // GET /api/tasks?projectId=&sprintId=&columnId=&type=&priority=
@@ -70,6 +70,8 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       comments: { include: { author: { select: { id: true, name: true, color: true, avatarUrl: true } } }, orderBy: { createdAt: 'asc' } },
       documents: { include: { document: { select: { id: true, title: true, type: true } } } },
       subtasks: { select: { id: true, taskKey: true, title: true, type: true, priority: true, column: { select: { name: true } } } },
+      blocks: { select: { id: true, blocked: { select: { id: true, taskKey: true, title: true, type: true, priority: true, isClosed: true, column: { select: { name: true } } } } } },
+      blockedBy: { select: { id: true, blocker: { select: { id: true, taskKey: true, title: true, type: true, priority: true, isClosed: true, column: { select: { name: true } } } } } },
     },
   });
   if (!task) { res.status(404).json({ success: false, error: 'Task não encontrada.' }); return; }
@@ -199,6 +201,39 @@ router.post('/reorder', async (req: AuthRequest, res: Response) => {
   const { updates } = req.body as { updates: Array<{ id: string; columnId: string; order: number }> };
   await Promise.all(updates.map(u => prisma.task.update({ where: { id: u.id }, data: { columnId: u.columnId, order: u.order } })));
   res.json({ success: true });
+});
+
+
+// POST /api/tasks/:id/dependencies — esta task bloqueia outra
+router.post('/:id/dependencies', async (req: AuthRequest, res: Response) => {
+  const { blockedId } = req.body;
+  if (!blockedId) { res.status(400).json({ success: false, error: 'blockedId obrigatório.' }); return; }
+  if (blockedId === req.params.id) { res.status(400).json({ success: false, error: 'Uma task não pode bloquear a si mesma.' }); return; }
+
+  // Verifica dependência circular direta
+  const circular = await prisma.taskDependency.findFirst({
+    where: { blockerId: blockedId, blockedId: req.params.id },
+  });
+  if (circular) { res.status(409).json({ success: false, error: 'Dependência circular detectada: a task destino já bloqueia esta.' }); return; }
+
+  try {
+    const dep = await prisma.taskDependency.create({
+      data: { blockerId: req.params.id, blockedId },
+    });
+    res.status(201).json({ success: true, data: dep });
+  } catch {
+    res.status(409).json({ success: false, error: 'Dependência já existe.' });
+  }
+});
+
+// DELETE /api/tasks/:id/dependencies/:depId — remove dependência
+router.delete('/:id/dependencies/:depId', async (req: AuthRequest, res: Response) => {
+  try {
+    await prisma.taskDependency.delete({ where: { id: req.params.depId } });
+    res.json({ success: true });
+  } catch {
+    res.status(404).json({ success: false, error: 'Dependência não encontrada.' });
+  }
 });
 
 export default router;
