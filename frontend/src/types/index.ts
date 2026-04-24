@@ -156,3 +156,24 @@ export interface ImportResult {
   created: number;
   skipped?: number;
 }
+
+export type NotificationType =
+  | 'TASK_ASSIGNED'
+  | 'TASK_COMMENTED'
+  | 'TASK_STATUS_CHANGED'
+  | 'SPRINT_STARTED'
+  | 'SPRINT_COMPLETED';
+
+export interface Notification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body?: string;
+  isRead: boolean;
+  link?: string;
+  createdAt: string;
+  taskId?: string;
+  projectId?: string;
+  actor?: Pick<User, 'id' | 'name' | 'color' | 'avatarUrl'>;
+  task?: { id: string; taskKey: string; title: string };
+}

@@ -14,6 +14,7 @@ import userRoutes from './routes/users';
 import importRoutes from './routes/imports';
 import reportRoutes from './routes/reports';
 import searchRoutes from './routes/search';
+import notificationRoutes from './routes/notifications';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -44,6 +45,7 @@ app.use('/api/documents', documentRoutes);
 app.use('/api/import',    importRoutes);
 app.use('/api/reports',   reportRoutes);
 app.use('/api/search',    searchRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });

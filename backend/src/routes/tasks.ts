@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
+import { createNotification, createNotificationsForUsers } from '../utils/notifications';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -112,6 +113,13 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       },
       select: taskSelect,
     });
+    if (body.assigneeIds && body.assigneeIds.length > 0) {
+      await createNotificationsForUsers(body.assigneeIds, {
+        type: 'TASK_ASSIGNED', title: `Você foi atribuído a "${body.title}"`,
+        body: `Tarefa ${task.taskKey}`, link: `/kanban`,
+        actorId: req.user!.userId, taskId: task.id, projectId: body.projectId,
+      });
+    }
     res.status(201).json({ success: true, data: task });
   } catch (err) {
     if (err instanceof z.ZodError) res.status(400).json({ success: false, error: err.errors });
@@ -123,6 +131,12 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 router.patch('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { assigneeIds, criteria, ...rest } = req.body;
+    const prevTask = await prisma.task.findUnique({
+      where: { id: req.params.id },
+      select: { columnId: true, title: true, taskKey: true, projectId: true,
+                column: { select: { name: true } },
+                assignees: { select: { userId: true } } },
+    });
     const data: Record<string, unknown> = { ...rest };
     if (rest.dueDate) data.dueDate = new Date(rest.dueDate);
 
@@ -139,6 +153,30 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       },
       select: taskSelect,
     });
+    if (prevTask && rest.columnId && rest.columnId !== prevTask.columnId) {
+      const newCol = task.column?.name ?? 'nova coluna';
+      const recipients = prevTask.assignees.map((a: { userId: string }) => a.userId);
+      if (recipients.length > 0) {
+        await createNotificationsForUsers(recipients, {
+          type: 'TASK_STATUS_CHANGED', title: `"${prevTask.title}" movida para ${newCol}`,
+          body: `Tarefa ${prevTask.taskKey}`, link: `/kanban`,
+          actorId: req.user!.userId, taskId: req.params.id,
+          projectId: prevTask.projectId ?? undefined,
+        });
+      }
+    }
+    if (assigneeIds !== undefined && prevTask) {
+      const prevIds = new Set(prevTask.assignees.map((a: { userId: string }) => a.userId));
+      const newIds  = (assigneeIds as string[]).filter((uid: string) => !prevIds.has(uid));
+      if (newIds.length > 0) {
+        await createNotificationsForUsers(newIds, {
+          type: 'TASK_ASSIGNED', title: `Você foi atribuído a "${prevTask.title}"`,
+          body: `Tarefa ${prevTask.taskKey}`, link: `/kanban`,
+          actorId: req.user!.userId, taskId: req.params.id,
+          projectId: prevTask.projectId ?? undefined,
+        });
+      }
+    }
     res.json({ success: true, data: task });
   } catch {
     res.status(500).json({ success: false, error: 'Erro interno.' });
@@ -159,6 +197,25 @@ router.post('/:id/comments', async (req: AuthRequest, res: Response) => {
     data: { content, taskId: req.params.id, authorId: req.user!.userId },
     include: { author: { select: { id: true, name: true, color: true, avatarUrl: true } } },
   });
+  try {
+    const taskData = await prisma.task.findUnique({
+      where: { id: req.params.id },
+      select: { title: true, taskKey: true, projectId: true, creatorId: true,
+                assignees: { select: { userId: true } } },
+    });
+    if (taskData) {
+      const recipients = Array.from(new Set([
+        taskData.creatorId,
+        ...taskData.assignees.map((a: { userId: string }) => a.userId),
+      ]));
+      await createNotificationsForUsers(recipients, {
+        type: 'TASK_COMMENTED', title: `Novo comentário em "${taskData.title}"`,
+        body: content.substring(0, 80), link: `/kanban`,
+        actorId: req.user!.userId, taskId: req.params.id,
+        projectId: taskData.projectId,
+      });
+    }
+  } catch { /* non-fatal */ }
   res.status(201).json({ success: true, data: comment });
 });
 

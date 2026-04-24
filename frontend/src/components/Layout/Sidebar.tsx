@@ -5,6 +5,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { projectsApi } from '../../api';
 import { Avatar } from '../Shared/Avatar';
 import { GlobalSearch } from '../Shared/GlobalSearch';
+import { NotificationBell } from '../Shared/NotificationBell';
 import type { Project } from '../../types';
 
 const NAV = [
@@ -183,6 +184,7 @@ export function Sidebar() {
                     <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
                     <div style={{ fontSize: 10, color: 'var(--text3)' }}>{user.role}</div>
                   </div>
+                  <NotificationBell />
                   <button onClick={logout} style={{ color: 'var(--text3)', fontSize: 14 }} title="Sair">⏻</button>
                 </>
               )}

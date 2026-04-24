@@ -126,3 +126,11 @@ export const importApi = {
   templateJiraCsv:  () => window.open('/api/import/template/jira-csv'),
   templateExcel:    () => window.open('/api/import/template/excel'),
 };
+
+export const notificationsApi = {
+  list:        (params?: { limit?: number; unreadOnly?: boolean }) =>
+    api.get('/notifications', { params }),
+  markRead:    (id: string) => api.patch(`/notifications/${id}/read`),
+  markAllRead: () => api.patch('/notifications/read-all'),
+  remove:      (id: string) => api.delete(`/notifications/${id}`),
+};
