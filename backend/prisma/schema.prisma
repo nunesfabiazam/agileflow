@@ -81,6 +81,7 @@ model User {
   createdDocs      Document[]
   createdEpics     Epic[]
   activityLogs     ActivityLog[]
+  documentVersions DocumentVersion[]
 
   @@map("users")
 }
@@ -333,6 +334,7 @@ model Document {
   author    User      @relation(fields: [authorId], references: [id])
 
   linkedTasks TaskDocument[]
+  versions    DocumentVersion[]
 
   @@map("documents")
 }
@@ -381,4 +383,22 @@ model TaskDependency {
 
   @@unique([blockerId, blockedId])
   @@map("task_dependencies")
+}
+
+// ─── DOCUMENT VERSION ────────────────────────────────────────────────────────
+
+model DocumentVersion {
+  id         String   @id @default(uuid())
+  title      String
+  content    String?  @db.Text
+  version    Int
+  createdAt  DateTime @default(now())
+
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  authorId   String?
+  author     User?    @relation(fields: [authorId], references: [id])
+
+  @@map("document_versions")
 }
