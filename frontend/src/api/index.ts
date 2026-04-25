@@ -3,9 +3,12 @@ import type { Task, KanbanColumn, Sprint, Epic, Project, Document, User, ApiResp
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 export const authApi = {
-  login:    (email: string, password: string) => api.post<ApiResponse<{ user: User; token: string }>>('/auth/login', { email, password }),
-  register: (data: { name: string; email: string; password: string; role?: string }) => api.post<ApiResponse<{ user: User; token: string }>>('/auth/register', data),
-  me:       () => api.get<ApiResponse<User>>('/auth/me'),
+  login:           (email: string, password: string) => api.post<ApiResponse<{ user: User; token: string }>>('/auth/login', { email, password }),
+  register:        (data: { name: string; email: string; password: string; role?: string }) => api.post<ApiResponse<{ user: User; token: string }>>('/auth/register', data),
+  me:              () => api.get<ApiResponse<User>>('/auth/me'),
+  forgotPassword:  (phone: string) => api.post('/auth/forgot-password', { phone }),
+  verifyResetToken:(phone: string, token: string) => api.post('/auth/verify-reset-token', { phone, token }),
+  resetPassword:   (phone: string, token: string, newPassword: string) => api.post('/auth/reset-password', { phone, token, newPassword }),
 };
 
 // ─── Projects ─────────────────────────────────────────────────────────────────
