@@ -140,3 +140,10 @@ export const aiApi = {
   assist: (action: string, context: Record<string, any>) =>
     api.post<{ success: boolean; data: { result: string } }>('/ai/assist', { action, context }),
 };
+
+export const adminApi = {
+  list:   ()                          => api.get('/admin/users'),
+  create: (data: Record<string, any>) => api.post('/admin/users', data),
+  update: (id: string, data: Record<string, any>) => api.patch(`/admin/users/${id}`, data),
+  remove: (id: string)                => api.delete(`/admin/users/${id}`),
+};

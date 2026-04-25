@@ -1,14 +1,7 @@
-import { projectsApi } from '../api';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAppStore } from '../../store/useAppStore';
-
-const adminApi = {
-  list:   ()                          => api.get<any>('/admin/users'),
-  create: (data: any)                 => api.post<any>('/admin/users', data),
-  update: (id: string, data: any)     => api.patch<any>(`/admin/users/${id}`, data),
-  remove: (id: string)                => api.delete<any>(`/admin/users/${id}`),
-};
+import { useAppStore } from '../store/useAppStore';
+import { adminApi } from '../api';
 
 const ROLES = ['ADMIN', 'MANAGER', 'DEVELOPER', 'DESIGNER', 'VIEWER'] as const;
 type Role = typeof ROLES[number];
@@ -36,13 +29,23 @@ const AVATAR_COLORS = [
 ];
 
 interface AdminUser {
-  id: string; name: string; email: string; role: Role;
-  color: string; phone?: string; isActive: boolean; createdAt: string;
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  color: string;
+  phone?: string;
+  isActive: boolean;
+  createdAt: string;
 }
 
 interface CreateForm {
-  name: string; email: string; password: string;
-  role: Role; color: string; phone: string;
+  name: string;
+  email: string;
+  password: string;
+  role: Role;
+  color: string;
+  phone: string;
 }
 
 const defaultForm: CreateForm = {
@@ -50,7 +53,7 @@ const defaultForm: CreateForm = {
 };
 
 export default function UserManagementPage() {
-  const { user, logout, sidebarCollapsed, activeProjectId, setActiveProject, addRecentProject } = useAppStore();
+  const { auth } = useAppStore();
   const qc = useQueryClient();
 
   const [showCreate, setShowCreate] = useState(false);
@@ -76,7 +79,7 @@ export default function UserManagementPage() {
   });
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => adminApi.update(id, data),
+    mutationFn: ({ id, data }: { id: string; data: Record<string, any> }) => adminApi.update(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
   });
 
@@ -85,7 +88,7 @@ export default function UserManagementPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
   });
 
-  if (user?.role !== 'ADMIN') {
+  if (auth?.role !== 'ADMIN') {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
         <div style={{ textAlign: 'center', color: 'var(--text3)' }}>
@@ -98,8 +101,10 @@ export default function UserManagementPage() {
 
   const users = data ?? [];
   const filtered = users.filter((u: AdminUser) => {
-    const matchSearch = !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
-    const matchRole   = filterRole === 'ALL' || u.role === filterRole;
+    const matchSearch = !search
+      || u.name.toLowerCase().includes(search.toLowerCase())
+      || u.email.toLowerCase().includes(search.toLowerCase());
+    const matchRole = filterRole === 'ALL' || u.role === filterRole;
     return matchSearch && matchRole;
   });
 
@@ -115,13 +120,17 @@ export default function UserManagementPage() {
             👥 Gerenciamento de Usuários
           </h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text3)' }}>
-            {active} ativo{active !== 1 ? 's' : ''}{inactive > 0 ? ` · ${inactive} inativo${inactive !== 1 ? 's' : ''}` : ''} · Registro público desabilitado
+            {active} ativo{active !== 1 ? 's' : ''}
+            {inactive > 0 ? ` · ${inactive} inativo${inactive !== 1 ? 's' : ''}` : ''}
+            {' · '}Registro público desabilitado
           </p>
         </div>
         <button
           className="btn btn-primary"
           onClick={() => { setShowCreate(true); setFormError(null); }}
-        >+ Novo Usuário</button>
+        >
+          + Novo Usuário
+        </button>
       </div>
 
       {/* Filters */}
@@ -151,17 +160,22 @@ export default function UserManagementPage() {
         <div style={{ background: 'var(--bg2)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
           {/* Table header */}
           <div style={{
-            display: 'grid', gridTemplateColumns: '2fr 2fr 1.2fr 1fr auto',
-            padding: '10px 16px', background: 'var(--bg3)',
-            fontSize: 11, fontWeight: 700, color: 'var(--text3)',
-            textTransform: 'uppercase', letterSpacing: '.06em',
+            display: 'grid',
+            gridTemplateColumns: '2fr 2fr 1.2fr 1fr 40px',
+            padding: '10px 16px',
+            background: 'var(--bg3)',
+            fontSize: 11,
+            fontWeight: 700,
+            color: 'var(--text3)',
+            textTransform: 'uppercase',
+            letterSpacing: '.06em',
             borderBottom: '1px solid var(--border)',
           }}>
             <span>Usuário</span>
             <span>E-mail / Telefone</span>
             <span>Papel</span>
             <span>Status</span>
-            <span>Ações</span>
+            <span />
           </div>
 
           {filtered.length === 0 ? (
@@ -169,12 +183,17 @@ export default function UserManagementPage() {
               Nenhum usuário encontrado.
             </div>
           ) : filtered.map((user: AdminUser) => (
-            <div key={user.id} style={{
-              display: 'grid', gridTemplateColumns: '2fr 2fr 1.2fr 1fr auto',
-              padding: '12px 16px', alignItems: 'center',
-              borderBottom: '1px solid var(--border)',
-              opacity: user.isActive ? 1 : 0.5,
-            }}>
+            <div
+              key={user.id}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '2fr 2fr 1.2fr 1fr 40px',
+                padding: '12px 16px',
+                alignItems: 'center',
+                borderBottom: '1px solid var(--border)',
+                opacity: user.isActive ? 1 : 0.5,
+              }}
+            >
               {/* Avatar + name */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{
@@ -187,7 +206,7 @@ export default function UserManagementPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)' }}>{user.name}</div>
-                  {user.id === user?.id && (
+                  {user.id === auth?.id && (
                     <div style={{ fontSize: 10, color: 'var(--accent)' }}>você</div>
                   )}
                 </div>
@@ -196,7 +215,9 @@ export default function UserManagementPage() {
               {/* Email + phone */}
               <div>
                 <div style={{ fontSize: 12, color: 'var(--text2)' }}>{user.email}</div>
-                {user.phone && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{user.phone}</div>}
+                {user.phone && (
+                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>{user.phone}</div>
+                )}
               </div>
 
               {/* Role selector */}
@@ -204,9 +225,15 @@ export default function UserManagementPage() {
                 <select
                   className="input"
                   value={user.role}
-                  disabled={user.id === user?.id}
+                  disabled={user.id === auth?.id}
                   onChange={e => updateMut.mutate({ id: user.id, data: { role: e.target.value } })}
-                  style={{ fontSize: 11, padding: '3px 8px', height: 28, color: ROLE_COLORS[user.role as Role], fontWeight: 600 }}
+                  style={{
+                    fontSize: 11,
+                    padding: '3px 8px',
+                    height: 28,
+                    color: ROLE_COLORS[user.role],
+                    fontWeight: 600,
+                  }}
                 >
                   {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                 </select>
@@ -217,21 +244,23 @@ export default function UserManagementPage() {
                 <button
                   className="btn btn-sm btn-ghost"
                   style={{ fontSize: 11, color: user.isActive ? '#10b981' : '#6b7280' }}
-                  disabled={user.id === user?.id}
+                  disabled={user.id === auth?.id}
                   onClick={() => updateMut.mutate({ id: user.id, data: { isActive: !user.isActive } })}
                 >
                   {user.isActive ? '✅ Ativo' : '⛔ Inativo'}
                 </button>
               </div>
 
-              {/* Delete */}
+              {/* Deactivate */}
               <div>
                 <button
                   className="btn btn-ghost btn-sm"
-                  style={{ color: '#ef4444', fontSize: 16, padding: '2px 6px' }}
-                  disabled={user.id === user?.id}
+                  style={{ color: '#ef4444', fontSize: 18, padding: '0 6px', lineHeight: 1 }}
+                  disabled={user.id === auth?.id}
                   title="Desativar usuário"
-                  onClick={() => { if (confirm(`Desativar ${user.name}?`)) removeMut.mutate(user.id); }}
+                  onClick={() => {
+                    if (window.confirm(`Desativar ${user.name}?`)) removeMut.mutate(user.id);
+                  }}
                 >×</button>
               </div>
             </div>
@@ -252,7 +281,10 @@ export default function UserManagementPage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text1)' }}>+ Criar Usuário</h2>
-              <button onClick={() => setShowCreate(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 20 }}>×</button>
+              <button
+                onClick={() => setShowCreate(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 20 }}
+              >×</button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -267,35 +299,57 @@ export default function UserManagementPage() {
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {AVATAR_COLORS.map(c => (
-                    <div key={c} onClick={() => setForm(f => ({ ...f, color: c }))}
-                      style={{ width: 18, height: 18, borderRadius: '50%', background: c, cursor: 'pointer',
-                        outline: form.color === c ? `2px solid ${c}` : 'none', outlineOffset: 2 }}
+                    <div
+                      key={c}
+                      onClick={() => setForm(f => ({ ...f, color: c }))}
+                      style={{
+                        width: 18, height: 18, borderRadius: '50%', background: c, cursor: 'pointer',
+                        outline: form.color === c ? `2px solid ${c}` : 'none', outlineOffset: 2,
+                      }}
                     />
                   ))}
                 </div>
               </div>
 
-              <input className="input" placeholder="Nome completo *" value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-              <input className="input" type="email" placeholder="E-mail *" value={form.email}
-                onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-              <input className="input" type="password" placeholder="Senha (mín. 6 caracteres) *" value={form.password}
-                onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
-              <input className="input" type="tel" placeholder="Telefone (ex: +55 11 99999-9999)" value={form.phone}
-                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
-              <select className="input" value={form.role}
-                onChange={e => setForm(f => ({ ...f, role: e.target.value as Role }))}>
+              <input
+                className="input" placeholder="Nome completo *"
+                value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              />
+              <input
+                className="input" type="email" placeholder="E-mail *"
+                value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              />
+              <input
+                className="input" type="password" placeholder="Senha (mín. 6 caracteres) *"
+                value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+              />
+              <input
+                className="input" type="tel" placeholder="Telefone (ex: +55 11 99999-9999)"
+                value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+              />
+              <select
+                className="input" value={form.role}
+                onChange={e => setForm(f => ({ ...f, role: e.target.value as Role }))}
+              >
                 {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
               </select>
 
-              {formError && <div style={{ fontSize: 12, color: '#ef4444' }}>{formError}</div>}
+              {formError && (
+                <div style={{ fontSize: 12, color: '#ef4444' }}>{formError}</div>
+              )}
 
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}
-                  onClick={() => setShowCreate(false)}>Cancelar</button>
-                <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}
+                <button
+                  className="btn btn-ghost"
+                  style={{ flex: 1, justifyContent: 'center' }}
+                  onClick={() => setShowCreate(false)}
+                >Cancelar</button>
+                <button
+                  className="btn btn-primary"
+                  style={{ flex: 1, justifyContent: 'center' }}
                   disabled={createMut.isPending}
-                  onClick={() => createMut.mutate(form)}>
+                  onClick={() => createMut.mutate(form)}
+                >
                   {createMut.isPending ? '⏳ Criando...' : '✅ Criar Usuário'}
                 </button>
               </div>
