@@ -134,3 +134,9 @@ export const notificationsApi = {
   markAllRead: () => api.patch('/notifications/read-all'),
   remove:      (id: string) => api.delete(`/notifications/${id}`),
 };
+
+// ─── AI ──────────────────────────────────────────────────────────────────────
+export const aiApi = {
+  assist: (action: string, context: Record<string, any>) =>
+    api.post<{ success: boolean; data: { result: string } }>('/ai/assist', { action, context }),
+};

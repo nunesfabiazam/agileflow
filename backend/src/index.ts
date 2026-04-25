@@ -14,6 +14,7 @@ import userRoutes from './routes/users';
 import importRoutes from './routes/imports';
 import reportRoutes from './routes/reports';
 import searchRoutes from './routes/search';
+import aiRoutes     from './routes/ai';
 import notificationRoutes from './routes/notifications';
 
 const app = express();
@@ -45,6 +46,7 @@ app.use('/api/documents', documentRoutes);
 app.use('/api/import',    importRoutes);
 app.use('/api/reports',   reportRoutes);
 app.use('/api/search',    searchRoutes);
+app.use('/api/ai',        aiRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/health', (_req, res) => {

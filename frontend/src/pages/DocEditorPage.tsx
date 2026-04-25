@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { documentsApi } from '../api';
+import { documentsApi, aiApi } from '../api';
 import { useAppStore } from '../store/useAppStore';
 import { TiptapEditor } from '../components/docs/TiptapEditor';
 import { Avatar } from '../components/Shared/Avatar';
@@ -32,6 +32,10 @@ export function DocEditorPage() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [ready, setReady]     = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [rightTab, setRightTab]         = useState<'meta' | 'ai'>('meta');
+  const [aiDocLoading, setAiDocLoading] = useState<string | null>(null);
+  const [aiDocResult, setAiDocResult]   = useState<string | null>(null);
+  const [aiDocAction, setAiDocAction]   = useState('');
 
   const { data: doc } = useQuery<Document | undefined>({
     queryKey: ['doc', id],
