@@ -53,7 +53,7 @@ const defaultForm: CreateForm = {
 };
 
 export default function UserManagementPage() {
-  const { auth } = useAppStore();
+  const { user } = useAppStore();
   const qc = useQueryClient();
 
   const [showCreate, setShowCreate] = useState(false);
@@ -88,7 +88,7 @@ export default function UserManagementPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
   });
 
-  if (auth?.role !== 'ADMIN') {
+  if (user?.role !== 'ADMIN') {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
         <div style={{ textAlign: 'center', color: 'var(--text3)' }}>
@@ -206,7 +206,7 @@ export default function UserManagementPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)' }}>{user.name}</div>
-                  {user.id === auth?.id && (
+                  {user.id === user?.id && (
                     <div style={{ fontSize: 10, color: 'var(--accent)' }}>você</div>
                   )}
                 </div>
@@ -225,7 +225,7 @@ export default function UserManagementPage() {
                 <select
                   className="input"
                   value={user.role}
-                  disabled={user.id === auth?.id}
+                  disabled={user.id === user?.id}
                   onChange={e => updateMut.mutate({ id: user.id, data: { role: e.target.value } })}
                   style={{
                     fontSize: 11,
@@ -244,7 +244,7 @@ export default function UserManagementPage() {
                 <button
                   className="btn btn-sm btn-ghost"
                   style={{ fontSize: 11, color: user.isActive ? '#10b981' : '#6b7280' }}
-                  disabled={user.id === auth?.id}
+                  disabled={user.id === user?.id}
                   onClick={() => updateMut.mutate({ id: user.id, data: { isActive: !user.isActive } })}
                 >
                   {user.isActive ? '✅ Ativo' : '⛔ Inativo'}
@@ -256,7 +256,7 @@ export default function UserManagementPage() {
                 <button
                   className="btn btn-ghost btn-sm"
                   style={{ color: '#ef4444', fontSize: 18, padding: '0 6px', lineHeight: 1 }}
-                  disabled={user.id === auth?.id}
+                  disabled={user.id === user?.id}
                   title="Desativar usuário"
                   onClick={() => {
                     if (window.confirm(`Desativar ${user.name}?`)) removeMut.mutate(user.id);
