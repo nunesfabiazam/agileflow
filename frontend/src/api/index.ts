@@ -160,3 +160,12 @@ export const sprintAnalyticsApi = {
   burndown: (sprintId: string)  => api.get(`/sprints/${sprintId}/burndown`),
   velocity: (projectId: string) => api.get(`/sprints/velocity/${projectId}`),
 };
+
+export const timeLogsApi = {
+  list:   (taskId: string) => api.get(`/tasks/${taskId}/time-logs`),
+  create: (taskId: string, minutes: number, note?: string, date?: string) =>
+    api.post(`/tasks/${taskId}/time-logs`, { minutes, note, date }),
+  remove: (taskId: string, id: string) => api.delete(`/tasks/${taskId}/time-logs/${id}`),
+  report: (params: Record<string, string>) =>
+    api.get('/time-logs/report', { params }),
+};

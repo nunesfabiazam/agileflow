@@ -90,6 +90,7 @@ model User {
   sentNotifications    Notification[] @relation("NotificationActor")
 
   comments         Comment[]  @relation("CommentAuthor")
+  timeLogs         TimeLog[]  @relation("TimeLogAuthor")
   @@map("users")
 }
 
@@ -253,6 +254,7 @@ model Task {
   @@index([columnId])
   @@index([sprintId])
   @@index([epicId])
+  timeLogs         TimeLog[]
   @@map("tasks")
 }
 
@@ -457,4 +459,20 @@ model Notification {
   project   Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
+}
+
+model TimeLog {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("TimeLogAuthor", fields: [userId], references: [id])
+  minutes   Int
+  note      String?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+  @@index([userId])
+  @@map("time_logs")
 }
