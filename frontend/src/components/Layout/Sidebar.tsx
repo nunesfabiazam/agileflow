@@ -5,6 +5,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { projectsApi } from '../../api';
 import { Avatar } from '../Shared/Avatar';
 import { GlobalSearch } from '../Shared/GlobalSearch';
+import { ProfileModal } from '../Shared/ProfileModal';
 import { NotificationBell } from '../Shared/NotificationBell';
 import type { Project } from '../../types';
 
@@ -26,6 +27,8 @@ export function Sidebar() {
   const { user, logout, sidebarCollapsed, activeProjectId, setActiveProject, addRecentProject } = useAppStore();
   const [showProjects, setShowProjects] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -194,7 +197,8 @@ export function Sidebar() {
         </div>
       </div>
 
-      {showSearch && <GlobalSearch onClose={() => setShowSearch(false)} />}
+      {showSearch  && <GlobalSearch  onClose={() => setShowSearch(false)} />}
+      {showProfile && <ProfileModal  onClose={() => setShowProfile(false)} />}
     </>
   );
 }
