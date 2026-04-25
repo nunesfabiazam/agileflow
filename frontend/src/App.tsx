@@ -55,6 +55,7 @@ export default function App() {
             <Route path="projects"              element={<ProjectsPage />} />
             <Route path="projects/:id/settings" element={<ProjectSettingsPage />} />
             <Route path="epics"                     element={<EpicsPage />} />
+            <Route path="roadmap"                   element={<RoadmapPage />} />
             <Route path="kanban"                element={<KanbanPage />} />
             <Route path="backlog"               element={<BacklogPage />} />
             <Route path="dashboard"             element={<DashboardPage />} />
