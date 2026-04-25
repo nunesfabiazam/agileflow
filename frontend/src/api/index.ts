@@ -147,3 +147,11 @@ export const adminApi = {
   update: (id: string, data: Record<string, any>) => api.patch(`/admin/users/${id}`, data),
   remove: (id: string)                => api.delete(`/admin/users/${id}`),
 };
+
+export const commentsApi = {
+  list:   (taskId: string)                              => api.get(`/tasks/${taskId}/comments`),
+  create: (taskId: string, text: string, mentions: string[]) =>
+    api.post(`/tasks/${taskId}/comments`, { text, mentions }),
+  update: (taskId: string, id: string, text: string)   => api.patch(`/tasks/${taskId}/comments/${id}`, { text }),
+  remove: (taskId: string, id: string)                 => api.delete(`/tasks/${taskId}/comments/${id}`),
+};

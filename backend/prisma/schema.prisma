@@ -89,6 +89,7 @@ model User {
   notifications        Notification[] @relation("NotificationUser")
   sentNotifications    Notification[] @relation("NotificationActor")
 
+  comments         Comment[]  @relation("CommentAuthor")
   @@map("users")
 }
 
