@@ -155,3 +155,8 @@ export const commentsApi = {
   update: (taskId: string, id: string, text: string)   => api.patch(`/tasks/${taskId}/comments/${id}`, { text }),
   remove: (taskId: string, id: string)                 => api.delete(`/tasks/${taskId}/comments/${id}`),
 };
+
+export const sprintAnalyticsApi = {
+  burndown: (sprintId: string)  => api.get(`/sprints/${sprintId}/burndown`),
+  velocity: (projectId: string) => api.get(`/sprints/velocity/${projectId}`),
+};

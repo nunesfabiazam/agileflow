@@ -17,6 +17,7 @@ const NAV = [
   { path: '/roadmap',    icon: '📅', label: 'Roadmap'      },
   { path: '/documents',  icon: '📄', label: 'Documentação' },
   { path: '/team',       icon: '👥', label: 'Time'          },
+  { path: '/sprint-analytics', icon: '📉', label: 'Sprint Analytics' },
   { path: '/reports',    icon: '📈', label: 'Relatórios'   },
   { path: '/import',     icon: '⬆️',  label: 'Importar'     },
 ];

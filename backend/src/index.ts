@@ -18,6 +18,7 @@ import aiRoutes     from './routes/ai';
 import notificationRoutes from './routes/notifications';
 import adminUsersRouter from './routes/adminUsers';
 import commentsRouter from './routes/comments';
+import sprintAnalyticsRouter from './routes/sprintAnalytics';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -52,6 +53,7 @@ app.use('/api/ai',        aiRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin/users', adminUsersRouter);
 app.use('/api/tasks/:taskId/comments', commentsRouter);
+app.use('/api/sprints', sprintAnalyticsRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });

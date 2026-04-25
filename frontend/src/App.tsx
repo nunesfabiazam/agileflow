@@ -15,6 +15,7 @@ import { ProjectSettingsPage } from './pages/ProjectSettingsPage';
 import { EpicsPage }          from './pages/EpicsPage';
 import { RoadmapPage }          from './pages/RoadmapPage';
 import UserManagementPage from './pages/UserManagementPage';
+import SprintAnalyticsPage from './pages/SprintAnalyticsPage';
 
 function AuthGuard() {
   const token = useAppStore(s => s.token);
@@ -69,6 +70,7 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
           <Route path="/admin/users" element={<UserManagementPage />} />
+          <Route path="sprint-analytics" element={<SprintAnalyticsPage />} />
       </Routes>
     </BrowserRouter>
   );
