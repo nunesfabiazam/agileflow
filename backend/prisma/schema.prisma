@@ -149,6 +149,7 @@ model KanbanColumn {
 
   tasks     Task[]
 
+  @@index([projectId])
   @@map("kanban_columns")
 }
 
@@ -170,6 +171,7 @@ model Sprint {
 
   tasks       Task[]
 
+  @@index([projectId])
   @@map("sprints")
 }
 
@@ -243,6 +245,10 @@ model Task {
 
   notifications Notification[]
 
+  @@index([projectId])
+  @@index([columnId])
+  @@index([sprintId])
+  @@index([epicId])
   @@map("tasks")
 }
 
@@ -266,6 +272,7 @@ model AcceptanceCriteria {
   taskId    String
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
+  @@index([taskId])
   @@map("acceptance_criteria")
 }
 
@@ -302,6 +309,7 @@ model Comment {
   authorId  String
   author    User     @relation(fields: [authorId], references: [id])
 
+  @@index([taskId])
   @@map("comments")
 }
 
