@@ -24,6 +24,7 @@ const NAV = [
 export function Sidebar() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout, sidebarCollapsed, activeProjectId, setActiveProject, addRecentProject } = useAppStore();
   const [showProjects, setShowProjects] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -180,7 +181,7 @@ export function Sidebar() {
 
   
           {/* Admin: user management */}
-          {auth?.role === 'ADMIN' && (
+          {user?.role === 'ADMIN' && (
             <div
               onClick={() => navigate('/admin/users')}
               style={{

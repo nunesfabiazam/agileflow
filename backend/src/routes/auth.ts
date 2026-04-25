@@ -114,7 +114,10 @@ router.post('/forgot-password', async (req, res) => {
   if (!parse.success) return res.status(400).json({ error: 'Telefone inválido.' });
 
   const { phone } = parse.data;
-  const user = await prisma.user.findFirst({ where: { phone } });
+  const user = await prisma.user.findFirst({
+    where: { phone },
+    select: { id: true, resetToken: true, resetTokenExpiry: true },
+  });
   if (!user) return res.json({ success: true }); // Don't reveal if user exists
 
   const token = Math.floor(100000 + Math.random() * 900000).toString();
@@ -154,7 +157,10 @@ router.post('/verify-reset-token', async (req, res) => {
   if (!parse.success) return res.status(400).json({ error: 'Dados inválidos.' });
 
   const { phone, token } = parse.data;
-  const user = await prisma.user.findFirst({ where: { phone } });
+  const user = await prisma.user.findFirst({
+    where: { phone },
+    select: { id: true, resetToken: true, resetTokenExpiry: true },
+  });
 
   if (
     !user ||
@@ -173,7 +179,10 @@ router.post('/reset-password', async (req, res) => {
   if (!parse.success) return res.status(400).json({ error: 'Dados inválidos.' });
 
   const { phone, token, newPassword } = parse.data;
-  const user = await prisma.user.findFirst({ where: { phone } });
+  const user = await prisma.user.findFirst({
+    where: { phone },
+    select: { id: true, resetToken: true, resetTokenExpiry: true },
+  });
 
   if (
     !user ||

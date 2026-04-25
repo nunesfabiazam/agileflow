@@ -1,17 +1,17 @@
-import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Router, Request, Response, NextFunction } from 'express';
+import { PrismaClient, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { authMiddleware } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // All routes require authentication
-router.use(authMiddleware);
+router.use(authenticate as any);
 
 // ── Admin-only guard middleware ───────────────────────────────────────────────
-const adminOnly = (req: Request, res: Response, next: Function) => {
+const adminOnly = (req: Request, res: Response, next: NextFunction) => {
   if ((req as any).user?.role !== 'ADMIN') {
     return res.status(403).json({ error: 'Apenas administradores podem realizar esta ação.' });
   }
@@ -19,7 +19,7 @@ const adminOnly = (req: Request, res: Response, next: Function) => {
 };
 
 // ── GET /api/admin/users — list all users (admin only) ───────────────────────
-router.get('/', adminOnly, async (_req, res) => {
+router.get('/', adminOnly, async (_req: Request, res: Response) => {
   const users = await prisma.user.findMany({
     select: {
       id: true, name: true, email: true, role: true,
@@ -36,12 +36,12 @@ const CreateUserSchema = z.object({
   name:     z.string().min(2),
   email:    z.string().email(),
   password: z.string().min(6),
-  role:     z.enum(['ADMIN', 'MANAGER', 'DEVELOPER', 'DESIGNER', 'VIEWER']).default('DEVELOPER'),
+  role:     z.nativeEnum(UserRole).default(UserRole.DEVELOPER),
   color:    z.string().default('#6366f1'),
   phone:    z.string().optional(),
 });
 
-router.post('/', adminOnly, async (req, res) => {
+router.post('/', adminOnly, async (req: Request, res: Response) => {
   const parse = CreateUserSchema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: 'Dados inválidos.', details: parse.error.flatten() });
 
@@ -62,12 +62,12 @@ router.post('/', adminOnly, async (req, res) => {
 // ── PATCH /api/admin/users/:id — update role / isActive (admin only) ─────────
 const UpdateUserSchema = z.object({
   name:     z.string().min(2).optional(),
-  role:     z.enum(['ADMIN', 'MANAGER', 'DEVELOPER', 'DESIGNER', 'VIEWER']).optional(),
+  role:     z.nativeEnum(UserRole).optional(),
   isActive: z.boolean().optional(),
   color:    z.string().optional(),
 });
 
-router.patch('/:id', adminOnly, async (req, res) => {
+router.patch('/:id', adminOnly, async (req: Request, res: Response) => {
   const parse = UpdateUserSchema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: 'Dados inválidos.' });
 
@@ -82,7 +82,7 @@ router.patch('/:id', adminOnly, async (req, res) => {
 });
 
 // ── DELETE /api/admin/users/:id — deactivate (soft delete) ───────────────────
-router.delete('/:id', adminOnly, async (req, res) => {
+router.delete('/:id', adminOnly, async (req: Request, res: Response) => {
   const { id } = req.params;
   const self = (req as any).user?.id;
   if (id === self) return res.status(400).json({ error: 'Você não pode desativar sua própria conta.' });

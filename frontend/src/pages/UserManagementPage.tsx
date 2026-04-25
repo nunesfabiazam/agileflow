@@ -1,7 +1,7 @@
+import { projectsApi } from '../api';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAppStore } from '../store';
-import api from '../api';
+import { useAppStore } from '../../store/useAppStore';
 
 const adminApi = {
   list:   ()                          => api.get<any>('/admin/users'),
@@ -35,7 +35,7 @@ const AVATAR_COLORS = [
   '#84cc16','#f97316','#a855f7','#14b8a6',
 ];
 
-interface User {
+interface AdminUser {
   id: string; name: string; email: string; role: Role;
   color: string; phone?: string; isActive: boolean; createdAt: string;
 }
@@ -50,7 +50,7 @@ const defaultForm: CreateForm = {
 };
 
 export default function UserManagementPage() {
-  const { auth } = useAppStore();
+  const { user, logout, sidebarCollapsed, activeProjectId, setActiveProject, addRecentProject } = useAppStore();
   const qc = useQueryClient();
 
   const [showCreate, setShowCreate] = useState(false);
@@ -61,7 +61,7 @@ export default function UserManagementPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-users'],
-    queryFn: () => adminApi.list().then(r => r.data.data as User[]),
+    queryFn: () => adminApi.list().then((r: any) => r.data.data as AdminUser[]),
   });
 
   const createMut = useMutation({
@@ -85,7 +85,7 @@ export default function UserManagementPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
   });
 
-  if (auth?.role !== 'ADMIN') {
+  if (user?.role !== 'ADMIN') {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
         <div style={{ textAlign: 'center', color: 'var(--text3)' }}>
@@ -97,14 +97,14 @@ export default function UserManagementPage() {
   }
 
   const users = data ?? [];
-  const filtered = users.filter(u => {
+  const filtered = users.filter((u: AdminUser) => {
     const matchSearch = !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
     const matchRole   = filterRole === 'ALL' || u.role === filterRole;
     return matchSearch && matchRole;
   });
 
-  const active   = users.filter(u => u.isActive).length;
-  const inactive = users.filter(u => !u.isActive).length;
+  const active   = users.filter((u: AdminUser) => u.isActive).length;
+  const inactive = users.filter((u: AdminUser) => !u.isActive).length;
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: 900, margin: '0 auto' }}>
@@ -136,7 +136,7 @@ export default function UserManagementPage() {
         <select
           className="input"
           value={filterRole}
-          onChange={e => setFilterRole(e.target.value as any)}
+          onChange={e => setFilterRole(e.target.value as Role | 'ALL')}
           style={{ minWidth: 140 }}
         >
           <option value="ALL">Todos os papéis</option>
@@ -168,17 +168,13 @@ export default function UserManagementPage() {
             <div style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
               Nenhum usuário encontrado.
             </div>
-          ) : filtered.map(user => (
+          ) : filtered.map((user: AdminUser) => (
             <div key={user.id} style={{
               display: 'grid', gridTemplateColumns: '2fr 2fr 1.2fr 1fr auto',
               padding: '12px 16px', alignItems: 'center',
               borderBottom: '1px solid var(--border)',
               opacity: user.isActive ? 1 : 0.5,
-              transition: 'background 0.15s',
-            }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg3)')}
-              onMouseLeave={e => (e.currentTarget.style.background = '')}
-            >
+            }}>
               {/* Avatar + name */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{
@@ -191,7 +187,7 @@ export default function UserManagementPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)' }}>{user.name}</div>
-                  {user.id === auth?.id && (
+                  {user.id === user?.id && (
                     <div style={{ fontSize: 10, color: 'var(--accent)' }}>você</div>
                   )}
                 </div>
@@ -208,13 +204,9 @@ export default function UserManagementPage() {
                 <select
                   className="input"
                   value={user.role}
-                  disabled={user.id === auth?.id}
+                  disabled={user.id === user?.id}
                   onChange={e => updateMut.mutate({ id: user.id, data: { role: e.target.value } })}
-                  style={{
-                    fontSize: 11, padding: '3px 8px', height: 28,
-                    color: ROLE_COLORS[user.role],
-                    fontWeight: 600,
-                  }}
+                  style={{ fontSize: 11, padding: '3px 8px', height: 28, color: ROLE_COLORS[user.role as Role], fontWeight: 600 }}
                 >
                   {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                 </select>
@@ -223,29 +215,23 @@ export default function UserManagementPage() {
               {/* Active toggle */}
               <div>
                 <button
-                  className={`btn btn-sm ${user.isActive ? 'btn-ghost' : 'btn-primary'}`}
-                  style={{
-                    fontSize: 11,
-                    color: user.isActive ? '#10b981' : '#6b7280',
-                    borderColor: user.isActive ? '#10b981' : undefined,
-                  }}
-                  disabled={user.id === auth?.id}
+                  className="btn btn-sm btn-ghost"
+                  style={{ fontSize: 11, color: user.isActive ? '#10b981' : '#6b7280' }}
+                  disabled={user.id === user?.id}
                   onClick={() => updateMut.mutate({ id: user.id, data: { isActive: !user.isActive } })}
                 >
                   {user.isActive ? '✅ Ativo' : '⛔ Inativo'}
                 </button>
               </div>
 
-              {/* Delete (deactivate) */}
+              {/* Delete */}
               <div>
                 <button
                   className="btn btn-ghost btn-sm"
                   style={{ color: '#ef4444', fontSize: 16, padding: '2px 6px' }}
-                  disabled={user.id === auth?.id}
+                  disabled={user.id === user?.id}
                   title="Desativar usuário"
-                  onClick={() => {
-                    if (confirm(`Desativar ${user.name}?`)) removeMut.mutate(user.id);
-                  }}
+                  onClick={() => { if (confirm(`Desativar ${user.name}?`)) removeMut.mutate(user.id); }}
                 >×</button>
               </div>
             </div>
@@ -270,7 +256,7 @@ export default function UserManagementPage() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {/* Avatar preview */}
+              {/* Avatar preview + color picker */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
                 <div style={{
                   width: 44, height: 44, borderRadius: '50%', background: form.color,
@@ -281,15 +267,9 @@ export default function UserManagementPage() {
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {AVATAR_COLORS.map(c => (
-                    <div
-                      key={c}
-                      onClick={() => setForm(f => ({ ...f, color: c }))}
-                      style={{
-                        width: 18, height: 18, borderRadius: '50%', background: c,
-                        cursor: 'pointer',
-                        outline: form.color === c ? `2px solid ${c}` : 'none',
-                        outlineOffset: 2,
-                      }}
+                    <div key={c} onClick={() => setForm(f => ({ ...f, color: c }))}
+                      style={{ width: 18, height: 18, borderRadius: '50%', background: c, cursor: 'pointer',
+                        outline: form.color === c ? `2px solid ${c}` : 'none', outlineOffset: 2 }}
                     />
                   ))}
                 </div>
@@ -303,7 +283,6 @@ export default function UserManagementPage() {
                 onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
               <input className="input" type="tel" placeholder="Telefone (ex: +55 11 99999-9999)" value={form.phone}
                 onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
-
               <select className="input" value={form.role}
                 onChange={e => setForm(f => ({ ...f, role: e.target.value as Role }))}>
                 {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
