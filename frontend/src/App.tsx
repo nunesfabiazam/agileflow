@@ -13,6 +13,7 @@ import { ImportPage }          from './pages/ImportPage';
 import { ProjectsPage }        from './pages/ProjectsPage';
 import { ProjectSettingsPage } from './pages/ProjectSettingsPage';
 import { EpicsPage }          from './pages/EpicsPage';
+import { RoadmapPage }          from './pages/RoadmapPage';
 
 function AuthGuard() {
   const token = useAppStore(s => s.token);
