@@ -200,21 +200,56 @@ export function Sidebar() {
               👥 Usuários
             </div>
           )}
-      <div style={{ marginTop: 'auto', padding: 12, borderTop: '1px solid var(--border)' }}>
+      <div style={{ marginTop: 'auto', padding: 12, borderTop: '1px solid var(--border)', position: 'relative' }}>
           {user ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Avatar name={user.name} color={user.color} avatarUrl={user.avatarUrl} size="md" />
-              {!sidebarCollapsed && (
-                <>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text3)' }}>{user.role}</div>
+            <>
+              {/* User menu dropdown */}
+              {showUserMenu && (
+                <div style={{
+                  position: 'absolute', bottom: '100%', left: 8, right: 8,
+                  background: 'var(--bg2)', border: '1px solid var(--border)',
+                  borderRadius: 10, boxShadow: '0 -4px 20px rgba(0,0,0,0.3)',
+                  overflow: 'hidden', zIndex: 100,
+                }}>
+                  <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)' }}>{user.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{user.email}</div>
                   </div>
-                  <NotificationBell />
-                  <button onClick={logout} style={{ color: 'var(--text3)', fontSize: 14 }} title="Sair">⏻</button>
-                </>
+                  <button
+                    onClick={() => { setShowProfile(true); setShowUserMenu(false); }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text1)', textAlign: 'left' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg3)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  >✏️ Editar perfil</button>
+                  <button
+                    onClick={() => { logout(); setShowUserMenu(false); }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#ef4444', textAlign: 'left' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg3)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  >⏻ Sair</button>
+                </div>
               )}
-            </div>
+
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderRadius: 8, padding: '4px 6px', transition: 'background 0.15s' }}
+                onClick={() => setShowUserMenu(m => !m)}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg3)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                title="Clique para ver opções"
+              >
+                <Avatar name={user.name} color={user.color} avatarUrl={user.avatarUrl} size="md" />
+                {!sidebarCollapsed && (
+                  <>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text3)' }}>{user.role}</div>
+                    </div>
+                    <NotificationBell />
+                    <span style={{ fontSize: 10, color: 'var(--text3)' }}>▲</span>
+                  </>
+                )}
+              </div>
+            </>
           ) : null}
         </div>
       </div>
