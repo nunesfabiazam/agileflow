@@ -150,9 +150,9 @@ export const adminApi = {
 
 export const commentsApi = {
   list:   (taskId: string)                              => api.get(`/tasks/${taskId}/comments`),
-  create: (taskId: string, text: string, mentions: string[]) =>
-    api.post(`/tasks/${taskId}/comments`, { text, mentions }),
-  update: (taskId: string, id: string, text: string)   => api.patch(`/tasks/${taskId}/comments/${id}`, { text }),
+  create: (taskId: string, content: string, mentions: string[]) =>
+    api.post(`/tasks/${taskId}/comments`, { content, mentions }),
+  update: (taskId: string, id: string, content: string) => api.patch(`/tasks/${taskId}/comments/${id}`, { content }),
   remove: (taskId: string, id: string)                 => api.delete(`/tasks/${taskId}/comments/${id}`),
 };
 

@@ -306,6 +306,7 @@ model TaskLabel {
 model Comment {
   id        String   @id @default(uuid())
   content   String
+  mentions  String[] @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
