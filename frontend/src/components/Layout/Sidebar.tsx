@@ -178,7 +178,26 @@ export function Sidebar() {
           )}
         </div>
 
-        <div style={{ marginTop: 'auto', padding: 12, borderTop: '1px solid var(--border)' }}>
+  
+          {/* Admin: user management */}
+          {auth?.role === 'ADMIN' && (
+            <div
+              onClick={() => navigate('/admin/users')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
+                color: location.pathname === '/admin/users' ? '#fff' : 'var(--text3)',
+                background: location.pathname === '/admin/users' ? 'var(--accent)' : 'transparent',
+                fontSize: 13, fontWeight: 500, marginBottom: 4,
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { if (location.pathname !== '/admin/users') (e.currentTarget as HTMLElement).style.background = 'var(--bg3)'; }}
+              onMouseLeave={e => { if (location.pathname !== '/admin/users') (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+            >
+              👥 Usuários
+            </div>
+          )}
+      <div style={{ marginTop: 'auto', padding: 12, borderTop: '1px solid var(--border)' }}>
           {user ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Avatar name={user.name} color={user.color} avatarUrl={user.avatarUrl} size="md" />

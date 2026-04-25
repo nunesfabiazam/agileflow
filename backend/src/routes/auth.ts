@@ -91,4 +91,106 @@ router.get('/me', authenticate as any, async (req: AuthRequest, res: Response) =
   res.json({ success: true, data: user });
 });
 
+
+// ─── Forgot Password (SMS via Twilio) ────────────────────────────────────────
+
+const ForgotSchema = z.object({
+  phone: z.string().min(10),
+});
+
+const VerifyTokenSchema = z.object({
+  phone: z.string().min(10),
+  token: z.string().length(6),
+});
+
+const ResetPasswordSchema = z.object({
+  phone: z.string().min(10),
+  token: z.string().length(6),
+  newPassword: z.string().min(6),
+});
+
+router.post('/forgot-password', async (req, res) => {
+  const parse = ForgotSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'Telefone inválido.' });
+
+  const { phone } = parse.data;
+  const user = await prisma.user.findFirst({ where: { phone } });
+  if (!user) return res.json({ success: true }); // Don't reveal if user exists
+
+  const token = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { resetToken: token, resetTokenExpiry: expiry },
+  });
+
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken  = process.env.TWILIO_AUTH_TOKEN;
+  const fromPhone  = process.env.TWILIO_PHONE_NUMBER;
+
+  if (!accountSid || !authToken || !fromPhone) {
+    console.warn('[forgot-password] Twilio env vars not set — token:', token);
+    return res.json({ success: true, _dev_token: token });
+  }
+
+  try {
+    const twilio = require('twilio')(accountSid, authToken);
+    await twilio.messages.create({
+      body: `AgileFlow: seu código de redefinição de senha é ${token}. Válido por 15 minutos.`,
+      from: fromPhone,
+      to: phone,
+    });
+  } catch (err: any) {
+    console.error('[twilio]', err.message);
+    return res.status(502).json({ error: 'Falha ao enviar SMS. Verifique as configurações do Twilio.' });
+  }
+
+  return res.json({ success: true });
+});
+
+router.post('/verify-reset-token', async (req, res) => {
+  const parse = VerifyTokenSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'Dados inválidos.' });
+
+  const { phone, token } = parse.data;
+  const user = await prisma.user.findFirst({ where: { phone } });
+
+  if (
+    !user ||
+    user.resetToken !== token ||
+    !user.resetTokenExpiry ||
+    new Date() > user.resetTokenExpiry
+  ) {
+    return res.status(400).json({ error: 'Código inválido ou expirado.' });
+  }
+
+  return res.json({ success: true });
+});
+
+router.post('/reset-password', async (req, res) => {
+  const parse = ResetPasswordSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'Dados inválidos.' });
+
+  const { phone, token, newPassword } = parse.data;
+  const user = await prisma.user.findFirst({ where: { phone } });
+
+  if (
+    !user ||
+    user.resetToken !== token ||
+    !user.resetTokenExpiry ||
+    new Date() > user.resetTokenExpiry
+  ) {
+    return res.status(400).json({ error: 'Código inválido ou expirado.' });
+  }
+
+  const hashed = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { password: hashed, resetToken: null, resetTokenExpiry: null },
+  });
+
+  return res.json({ success: true });
+});
+
 export default router;

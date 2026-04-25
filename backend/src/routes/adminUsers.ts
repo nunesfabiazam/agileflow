@@ -1,0 +1,94 @@
+import { Router, Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+import { z } from 'zod';
+import { authMiddleware } from '../middleware/auth';
+
+const router = Router();
+const prisma = new PrismaClient();
+
+// All routes require authentication
+router.use(authMiddleware);
+
+// ── Admin-only guard middleware ───────────────────────────────────────────────
+const adminOnly = (req: Request, res: Response, next: Function) => {
+  if ((req as any).user?.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Apenas administradores podem realizar esta ação.' });
+  }
+  next();
+};
+
+// ── GET /api/admin/users — list all users (admin only) ───────────────────────
+router.get('/', adminOnly, async (_req, res) => {
+  const users = await prisma.user.findMany({
+    select: {
+      id: true, name: true, email: true, role: true,
+      color: true, avatarUrl: true, phone: true,
+      isActive: true, createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  return res.json({ success: true, data: users });
+});
+
+// ── POST /api/admin/users — create user (admin only) ─────────────────────────
+const CreateUserSchema = z.object({
+  name:     z.string().min(2),
+  email:    z.string().email(),
+  password: z.string().min(6),
+  role:     z.enum(['ADMIN', 'MANAGER', 'DEVELOPER', 'DESIGNER', 'VIEWER']).default('DEVELOPER'),
+  color:    z.string().default('#6366f1'),
+  phone:    z.string().optional(),
+});
+
+router.post('/', adminOnly, async (req, res) => {
+  const parse = CreateUserSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'Dados inválidos.', details: parse.error.flatten() });
+
+  const { name, email, password, role, color, phone } = parse.data;
+
+  const exists = await prisma.user.findUnique({ where: { email } });
+  if (exists) return res.status(409).json({ error: 'E-mail já cadastrado.' });
+
+  const hashed = await bcrypt.hash(password, 10);
+  const user = await prisma.user.create({
+    data: { name, email, password: hashed, role, color, phone: phone ?? null, isActive: true },
+    select: { id: true, name: true, email: true, role: true, color: true, phone: true, isActive: true, createdAt: true },
+  });
+
+  return res.status(201).json({ success: true, data: user });
+});
+
+// ── PATCH /api/admin/users/:id — update role / isActive (admin only) ─────────
+const UpdateUserSchema = z.object({
+  name:     z.string().min(2).optional(),
+  role:     z.enum(['ADMIN', 'MANAGER', 'DEVELOPER', 'DESIGNER', 'VIEWER']).optional(),
+  isActive: z.boolean().optional(),
+  color:    z.string().optional(),
+});
+
+router.patch('/:id', adminOnly, async (req, res) => {
+  const parse = UpdateUserSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'Dados inválidos.' });
+
+  const { id } = req.params;
+  const updated = await prisma.user.update({
+    where: { id },
+    data: parse.data,
+    select: { id: true, name: true, email: true, role: true, color: true, isActive: true },
+  });
+
+  return res.json({ success: true, data: updated });
+});
+
+// ── DELETE /api/admin/users/:id — deactivate (soft delete) ───────────────────
+router.delete('/:id', adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const self = (req as any).user?.id;
+  if (id === self) return res.status(400).json({ error: 'Você não pode desativar sua própria conta.' });
+
+  await prisma.user.update({ where: { id }, data: { isActive: false } });
+  return res.json({ success: true });
+});
+
+export default router;
