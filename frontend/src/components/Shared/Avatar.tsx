@@ -1,7 +1,7 @@
 interface Props {
   name: string;
   color?: string;
-  avatarUrl?: string;
+  avatarUrl?: string | null;
   size?: 'sm' | 'md' | 'lg';
   title?: string;
 }
@@ -9,7 +9,7 @@ interface Props {
 const SIZES = { sm: 22, md: 28, lg: 36 };
 const FONT  = { sm: 10, md: 11, lg: 14 };
 
-export function AvatarGroup({ users, max = 3, size: _size }: { users: Array<{ id: string; name: string; color?: string; avatarUrl?: string }>; max?: number; size?: string }) {
+export function AvatarGroup({ users, max = 3, size: _size }: { users: Array<{ id: string; name: string; color?: string; avatarUrl?: string | null }>; max?: number; size?: string }) {
   const visible = users.slice(0, max);
   const extra = users.length - max;
   return (

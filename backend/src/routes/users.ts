@@ -23,7 +23,7 @@ router.get('/', async (_req, res: Response) => {
 const UpdateSchema = z.object({
   name:      z.string().min(2).max(100).optional(),
   color:     z.string().optional(),
-  avatarUrl: z.string().url().nullable().optional(),
+  avatarUrl: z.string().nullable().optional(),
   phone:     z.string().optional(),
 });
 

@@ -12,7 +12,8 @@ export interface User {
   email: string;
   role: UserRole;
   color: string;
-  avatarUrl?: string;
+  avatarUrl?: string | null;
+  phone?: string | null;
   createdAt?: string;
 }
 
