@@ -62,8 +62,16 @@ router.post('/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = LoginSchema.parse(req.body);
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      res.status(401).json({ success: false, error: 'Credenciais inválidas.' });
+    if (!user) {
+      res.status(401).json({ success: false, error: 'E-mail não encontrado.' });
+      return;
+    }
+    if (!user.isActive) {
+      res.status(401).json({ success: false, error: 'Conta desativada. Fale com o administrador.' });
+      return;
+    }
+    if (!(await bcrypt.compare(password, user.password))) {
+      res.status(401).json({ success: false, error: 'Senha incorreta.' });
       return;
     }
     const token = jwt.sign(
