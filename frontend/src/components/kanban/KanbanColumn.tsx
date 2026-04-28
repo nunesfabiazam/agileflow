@@ -13,13 +13,15 @@ interface Props {
   isEditing: boolean;
   onStartEdit: () => void;
   onCancelEdit: () => void;
+  isDragOver?: boolean;
 }
 
-export function KanbanColumnComp({ column, tasks, onTaskClick, onRename, onRemove, isEditing, onStartEdit, onCancelEdit }: Props) {
+export function KanbanColumnComp({ column, tasks, onTaskClick, onRename, onRemove, isEditing, onStartEdit, onCancelEdit, isDragOver }: Props) {
   const [label, setLabel] = useState(column.name);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const { setNodeRef, isOver: isOverDrop } = useDroppable({ id: column.id });
+  const isOver = isOverDrop || isDragOver;
 
   useEffect(() => { if (isEditing) inputRef.current?.focus(); }, [isEditing]);
   useEffect(() => { setLabel(column.name); }, [column.name]);
