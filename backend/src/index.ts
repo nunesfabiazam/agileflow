@@ -25,20 +25,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors({
-  origin: (origin, callback) => {
-    // Allow non-browser requests (curl, Postman, server-to-server)
-    if (!origin) return callback(null, true);
-    // Always allow Vercel deployments
-    if (origin.endsWith('.vercel.app')) return callback(null, true);
-    // Allow any explicitly configured frontend URL(s), comma-separated
-    const allowed = (process.env.FRONTEND_URL || 'http://localhost:5173')
-      .split(',').map(s => s.trim()).filter(Boolean);
-    if (allowed.some(u => origin === u || origin.startsWith(u))) {
-      return callback(null, true);
-    }
-    // Deny — but still send a proper error, not a random origin
-    callback(new Error(`CORS: origin ${origin} not allowed`));
-  },
+  origin: true,
   credentials: true,
 }));
 app.use(express.json({ limit: '50mb' }));
