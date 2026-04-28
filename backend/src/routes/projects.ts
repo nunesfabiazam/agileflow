@@ -27,14 +27,17 @@ const DEFAULT_SPACES = ['Engenharia', 'Produto', 'UX & Design', 'QA'];
 
 // GET /api/projects
 router.get('/', async (req: AuthRequest, res: Response) => {
+  const isAdmin = req.user!.role === 'ADMIN';
   const projects = await prisma.project.findMany({
-    where: {
-      OR: [
-        { ownerId: req.user!.userId },
-        { members: { some: { userId: req.user!.userId } } },
-      ],
-      isArchived: false,
-    },
+    where: isAdmin
+      ? { isArchived: false }
+      : {
+          OR: [
+            { ownerId: req.user!.userId },
+            { members: { some: { userId: req.user!.userId } } },
+          ],
+          isArchived: false,
+        },
     include: {
       owner: { select: { id: true, name: true, color: true } },
       _count: { select: { tasks: true, members: true, sprints: true } },
