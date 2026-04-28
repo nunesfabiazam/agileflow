@@ -58,8 +58,8 @@ export default function App() {
             <Route index element={<Navigate to="/kanban" replace />} />
             <Route path="projects"              element={<ProjectsPage />} />
             <Route path="projects/:id/settings" element={<ProjectSettingsPage />} />
-            <Route path="epics"                     element={<EpicsPage />} />
-            <Route path="roadmap"                   element={<RoadmapPage />} />
+            <Route path="epics"                 element={<EpicsPage />} />
+            <Route path="roadmap"               element={<RoadmapPage />} />
             <Route path="kanban"                element={<KanbanPage />} />
             <Route path="backlog"               element={<BacklogPage />} />
             <Route path="dashboard"             element={<DashboardPage />} />
@@ -67,12 +67,12 @@ export default function App() {
             <Route path="team"                  element={<TeamPage />} />
             <Route path="reports"               element={<ReportsPage />} />
             <Route path="import"                element={<ImportPage />} />
+            <Route path="admin/users"           element={<UserManagementPage />} />
+            <Route path="sprint-analytics"      element={<SprintAnalyticsPage />} />
+            <Route path="time-report"           element={<TimeReportPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
-          <Route path="/admin/users" element={<UserManagementPage />} />
-          <Route path="sprint-analytics" element={<SprintAnalyticsPage />} />
-          <Route path="time-report" element={<TimeReportPage />} />
       </Routes>
     </BrowserRouter>
   );
