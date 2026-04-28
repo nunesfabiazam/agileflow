@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { sprintAnalyticsApi, sprintsApi } from '../api';
 
@@ -173,6 +174,7 @@ function VelocityChart({ data }: { data: { velocity: VelocityItem[]; avgVelocity
 
 export default function SprintAnalyticsPage() {
   const { activeProjectId } = useAppStore();
+  const navigate = useNavigate();
   const [selectedSprint, setSelectedSprint] = useState<string>('');
   const [tab, setTab] = useState<'burndown' | 'velocity'>('burndown');
 
@@ -211,13 +213,16 @@ export default function SprintAnalyticsPage() {
   return (
     <div style={{ padding: '24px 32px', maxWidth: 800, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--text1)' }}>
-          📉 Analytics de Sprint
-        </h1>
-        <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text3)' }}>
-          Burndown chart e velocity histórico do projeto
-        </p>
+      <div className="page-header" style={{ marginBottom: 24 }}>
+        <button onClick={() => navigate(-1)} style={{ color: 'var(--text3)', fontSize: 18, padding: '4px 8px', borderRadius: 6, background: 'var(--bg3)', border: 'none', cursor: 'pointer', marginRight: 8 }}>←</button>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--text1)' }}>
+            📉 Analytics de Sprint
+          </h1>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text3)' }}>
+            Burndown chart e velocity histórico do projeto
+          </p>
+        </div>
       </div>
 
       {/* Tabs */}
