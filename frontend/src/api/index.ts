@@ -38,6 +38,7 @@ export const tasksApi = {
   update:         (id: string, data: Partial<Task> & { assigneeIds?: string[]; criteria?: Array<{ text: string; isDone?: boolean }> }) => api.patch<ApiResponse<Task>>(`/tasks/${id}`, data),
   remove:         (id: string) => api.delete(`/tasks/${id}`),
   reorder:        (updates: Array<{ id: string; columnId: string; order: number }>) => api.post('/tasks/reorder', { updates }),
+  bulkUpdate:     (ids: string[], data: { sprintId?: string | null; priority?: string; epicId?: string | null }) => api.patch('/tasks/bulk', { ids, data }),
   addComment:     (id: string, content: string) => api.post(`/tasks/${id}/comments`, { content }),
   updateCriteria: (taskId: string, criterionId: string, isDone: boolean) => api.patch(`/tasks/${taskId}/criteria/${criterionId}`, { isDone }),
   linkDoc:        (taskId: string, documentId: string) => api.post(`/tasks/${taskId}/documents`, { documentId }),
