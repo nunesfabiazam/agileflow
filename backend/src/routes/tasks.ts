@@ -138,7 +138,7 @@ router.patch('/bulk', async (req: AuthRequest, res: Response) => {
     return;
   }
   try {
-    await prisma.task.updateMany({ where: { id: { in: ids } }, data });
+    await prisma.task.updateMany({ where: { id: { in: ids } }, data: data as any });
     res.json({ success: true, updated: ids.length });
   } catch {
     res.status(500).json({ success: false, error: 'Erro interno.' });

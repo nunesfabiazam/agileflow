@@ -100,11 +100,11 @@ export function BacklogPage() {
     onMutate: async ({ taskId, sprintId }) => {
       await qc.cancelQueries({ queryKey: ['tasks', activeProjectId] });
       const prev = qc.getQueriesData<Task[]>({ queryKey: ['tasks', activeProjectId] });
-      const targetSprint = sprintId ? (sprints as Sprint[]).find(s => s.id === sprintId) : null;
+      const targetSprint = sprintId ? (sprints as Sprint[]).find(s => s.id === sprintId) : undefined;
       qc.setQueriesData<Task[]>({ queryKey: ['tasks', activeProjectId] }, (old) => {
         if (!old) return old;
         return old.map(t => t.id === taskId
-          ? { ...t, sprint: targetSprint ? { id: targetSprint.id, name: targetSprint.name } : null }
+          ? { ...t, sprint: targetSprint ? { id: targetSprint.id, name: targetSprint.name } : undefined }
           : t
         );
       });
@@ -123,11 +123,11 @@ export function BacklogPage() {
     onMutate: async ({ ids, sprintId }) => {
       await qc.cancelQueries({ queryKey: ['tasks', activeProjectId] });
       const prev = qc.getQueriesData<Task[]>({ queryKey: ['tasks', activeProjectId] });
-      const targetSprint = sprintId ? (sprints as Sprint[]).find(s => s.id === sprintId) : null;
+      const targetSprint = sprintId ? (sprints as Sprint[]).find(s => s.id === sprintId) : undefined;
       qc.setQueriesData<Task[]>({ queryKey: ['tasks', activeProjectId] }, (old) => {
         if (!old) return old;
         return old.map(t => ids.includes(t.id)
-          ? { ...t, sprint: targetSprint ? { id: targetSprint.id, name: targetSprint.name } : null }
+          ? { ...t, sprint: targetSprint ? { id: targetSprint.id, name: targetSprint.name } : undefined }
           : t
         );
       });
