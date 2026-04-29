@@ -46,7 +46,7 @@ export const useAppStore = create<AppState>()(
       sidebarCollapsed: false,
       toggleSidebar: () => set(s => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
-      theme: 'dark',
+      theme: 'light',
       setTheme: (t) => {
         document.documentElement.setAttribute('data-theme', t);
         set({ theme: t });

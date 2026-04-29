@@ -4,17 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import './styles/global.css';
 
-// Apply saved theme before React mounts to avoid flash
+// Apply saved theme before React mounts to avoid flash (default: light)
 try {
   const saved = localStorage.getItem('agileflow-store');
-  if (saved) {
-    const { state } = JSON.parse(saved);
-    if (state?.theme) {
-      document.documentElement.setAttribute('data-theme', state.theme);
-    }
-  }
+  const parsed = saved ? JSON.parse(saved) : null;
+  const theme = parsed?.state?.theme ?? 'light';
+  document.documentElement.setAttribute('data-theme', theme);
 } catch {
-  // ignore
+  document.documentElement.setAttribute('data-theme', 'light');
 }
 
 const queryClient = new QueryClient({
