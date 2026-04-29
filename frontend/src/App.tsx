@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useAppStore } from './store/useAppStore';
 import { Sidebar } from './components/Layout/Sidebar';
 import { LoginPage }           from './pages/LoginPage';
@@ -45,9 +46,18 @@ function EditorLayout() {
   );
 }
 
+function ThemeSync() {
+  const theme = useAppStore(s => s.theme);
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
+      <ThemeSync />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<AuthGuard />}>

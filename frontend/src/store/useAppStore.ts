@@ -17,6 +17,10 @@ interface AppState {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
 
+  // Theme
+  theme: 'dark' | 'light';
+  setTheme: (t: 'dark' | 'light') => void;
+
   // Recent projects cache
   recentProjects: Project[];
   addRecentProject: (p: Project) => void;
@@ -42,6 +46,9 @@ export const useAppStore = create<AppState>()(
       sidebarCollapsed: false,
       toggleSidebar: () => set(s => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
+      theme: 'dark',
+      setTheme: (t) => set({ theme: t }),
+
       recentProjects: [],
       addRecentProject: (p) => set(s => ({
         recentProjects: [p, ...s.recentProjects.filter(r => r.id !== p.id)].slice(0, 5),
@@ -49,7 +56,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'agileflow-store',
-      partialize: (s) => ({ user: s.user, token: s.token, activeProjectId: s.activeProjectId, recentProjects: s.recentProjects }),
+      partialize: (s) => ({ user: s.user, token: s.token, activeProjectId: s.activeProjectId, recentProjects: s.recentProjects, theme: s.theme }),
     }
   )
 );
