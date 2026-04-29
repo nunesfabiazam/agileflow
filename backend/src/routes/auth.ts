@@ -147,10 +147,12 @@ async function sendViaGmailApi(to: string, subject: string, html: string): Promi
   const { access_token } = await tokenRes.json() as { access_token: string };
 
   // 2. Montar mensagem RFC 2822 e codificar em base64url
+  // Assuntos com acentos precisam de encoded-word (RFC 2047) para não quebrar
+  const encodedSubject = `=?utf-8?b?${Buffer.from(subject).toString('base64')}?=`;
   const raw = [
     `From: AgileFlow <${process.env.GMAIL_USER}>`,
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodedSubject}`,
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=utf-8',
     '',
