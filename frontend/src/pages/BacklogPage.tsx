@@ -409,7 +409,7 @@ function TaskTable({
               style={{ background: isSelected ? 'rgba(99,102,241,.08)' : undefined }}
             >
               {selectable && (
-                <td style={{ textAlign: 'center' }} onClick={e => { e.stopPropagation(); onToggleSelect!(t.id); }}>
+                <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     checked={isSelected}
