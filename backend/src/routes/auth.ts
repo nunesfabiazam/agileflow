@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
+import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -101,8 +103,6 @@ router.get('/me', authenticate as any, async (req: AuthRequest, res: Response) =
 
 
 // ─── Forgot Password (e-mail via Gmail/Nodemailer) ───────────────────────────
-import crypto from 'crypto';
-import nodemailer from 'nodemailer';
 
 function createTransporter() {
   return nodemailer.createTransport({
