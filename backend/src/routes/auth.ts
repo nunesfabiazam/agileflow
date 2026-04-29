@@ -178,6 +178,7 @@ router.post('/forgot-password', async (req, res) => {
       host:   'smtp.gmail.com',
       port:   465,
       secure: true,
+      family: 4, // Render não suporta IPv6 — forçar IPv4
       auth: { user: gmailUser, pass: gmailPass },
     });
 
