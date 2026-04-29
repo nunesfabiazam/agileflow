@@ -18,6 +18,7 @@ import { RoadmapPage }          from './pages/RoadmapPage';
 import UserManagementPage from './pages/UserManagementPage';
 import SprintAnalyticsPage from './pages/SprintAnalyticsPage';
 import TimeReportPage from './pages/TimeReportPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 
 function AuthGuard() {
   const token = useAppStore(s => s.token);
@@ -59,7 +60,8 @@ export default function App() {
     <BrowserRouter>
       <ThemeSync />
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login"          element={<LoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route element={<AuthGuard />}>
           <Route element={<EditorLayout />}>
             <Route path="documents/:id" element={<DocEditorPage />} />
