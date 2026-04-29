@@ -382,12 +382,11 @@ const TaskRow = memo(function TaskRow({
       style={{ background: isSelected ? 'rgba(99,102,241,.08)' : undefined }}
     >
       {onToggleSelect && (
-        <td style={{ textAlign: 'center' }}>
+        <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
           <input
             type="checkbox"
             checked={isSelected}
             onChange={() => onToggleSelect(task.id)}
-            onClick={e => e.stopPropagation()}
             style={{ cursor: 'pointer', accentColor: 'var(--accent)', width: 15, height: 15 }}
           />
         </td>
