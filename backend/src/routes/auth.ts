@@ -192,11 +192,11 @@ router.post('/forgot-password', async (req, res) => {
 
   } catch (err: any) {
     // Loga o erro real para diagnóstico nos logs do Render
-    console.error('[forgot-password] Erro ao enviar email:', err.message, err.code ?? '');
+    console.error('[forgot-password] Erro:', err.message, err.code ?? '');
     return res.status(500).json({
       error: 'Falha ao enviar e-mail.',
-      // Expõe detalhes apenas em dev para diagnóstico
-      ...(process.env.NODE_ENV !== 'production' && { detail: err.message }),
+      detail: err.message,   // temporário para diagnóstico
+      code:   err.code ?? null,
     });
   }
 });
