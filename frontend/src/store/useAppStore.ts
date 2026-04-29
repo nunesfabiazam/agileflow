@@ -47,7 +47,10 @@ export const useAppStore = create<AppState>()(
       toggleSidebar: () => set(s => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
       theme: 'dark',
-      setTheme: (t) => set({ theme: t }),
+      setTheme: (t) => {
+        document.documentElement.setAttribute('data-theme', t);
+        set({ theme: t });
+      },
 
       recentProjects: [],
       addRecentProject: (p) => set(s => ({
