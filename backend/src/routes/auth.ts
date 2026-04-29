@@ -180,7 +180,7 @@ router.post('/forgot-password', async (req, res) => {
       secure: true,
       family: 4, // Render não suporta IPv6 — forçar IPv4
       auth: { user: gmailUser, pass: gmailPass },
-    });
+    } as any);
 
     await transporter.sendMail({
       from:    `"AgileFlow" <${gmailUser}>`,
