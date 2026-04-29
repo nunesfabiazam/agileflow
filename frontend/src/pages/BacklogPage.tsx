@@ -4,7 +4,7 @@ import { tasksApi, sprintsApi } from '../api';
 import type { Task, Sprint } from '../types';
 import { Badge } from '../components/Shared/Badge';
 import { Avatar } from '../components/Shared/Avatar';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, memo } from 'react';
 import { TaskDetailModal } from '../components/kanban/TaskDetailModal';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -364,6 +364,71 @@ export function BacklogPage() {
   );
 }
 
+// ── Memoized row — só re-renderiza quando os seus próprios dados mudam ────────
+const TaskRow = memo(function TaskRow({
+  task, onSelect, isSelected, onToggleSelect, showMoveToSprint, sprints, onMoveToSprint,
+}: {
+  task: Task;
+  onSelect: (t: Task) => void;
+  isSelected: boolean;
+  onToggleSelect?: (id: string) => void;
+  showMoveToSprint?: boolean;
+  sprints?: Sprint[];
+  onMoveToSprint?: (taskId: string, sprintId: string | null) => void;
+}) {
+  return (
+    <tr
+      className="backlog-row"
+      style={{ background: isSelected ? 'rgba(99,102,241,.08)' : undefined }}
+    >
+      {onToggleSelect && (
+        <td style={{ textAlign: 'center' }}>
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => onToggleSelect(task.id)}
+            onClick={e => e.stopPropagation()}
+            style={{ cursor: 'pointer', accentColor: 'var(--accent)', width: 15, height: 15 }}
+          />
+        </td>
+      )}
+      <td onClick={() => onSelect(task)}><code style={{ fontSize: 11, color: 'var(--text3)' }}>{task.taskKey}</code></td>
+      <td onClick={() => onSelect(task)}><Badge type="type" value={task.type} /></td>
+      <td onClick={() => onSelect(task)} style={{ maxWidth: 300, fontSize: 13 }}>{task.title}</td>
+      <td onClick={() => onSelect(task)}>
+        {task.epic && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: task.epic.color, display: 'inline-block' }} />{task.epic.title}
+        </span>}
+      </td>
+      <td onClick={() => onSelect(task)}><Badge type="priority" value={task.priority} /></td>
+      <td onClick={() => onSelect(task)}>{task.column && <span style={{ fontSize: 12, color: 'var(--text2)' }}>{task.column.name}</span>}</td>
+      <td onClick={() => onSelect(task)}>
+        <span style={{ fontSize: 12, background: 'var(--bg4)', padding: '1px 6px', borderRadius: 4, color: 'var(--text3)' }}>🎯 {task.storyPoints ?? '—'}</span>
+      </td>
+      <td onClick={() => onSelect(task)}>
+        <div className="avatar-stack">
+          {task.assignees?.map(a => <Avatar key={a.user.id} name={a.user.name} color={a.user.color} size="sm" />)}
+        </div>
+      </td>
+      {showMoveToSprint && (
+        <td>
+          <select
+            value={task.sprint?.id ?? ''}
+            onChange={e => onMoveToSprint?.(task.id, e.target.value || null)}
+            onClick={e => e.stopPropagation()}
+            style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text2)', cursor: 'pointer', maxWidth: 140 }}
+          >
+            <option value="">— Backlog</option>
+            {(sprints ?? []).map(s => (
+              <option key={s.id} value={s.id}>{s.status === 'ACTIVE' ? '🟢 ' : '📅 '}{s.name}</option>
+            ))}
+          </select>
+        </td>
+      )}
+    </tr>
+  );
+});
+
 function TaskTable({
   tasks, onSelect, showMoveToSprint = false, sprints = [], onMoveToSprint,
   selectedIds, onToggleSelect, onToggleAll,
@@ -400,60 +465,18 @@ function TaskTable({
         {showMoveToSprint && <th>Sprint</th>}
       </tr></thead>
       <tbody>
-        {tasks.map(t => {
-          const isSelected = selectable && selectedIds!.has(t.id);
-          return (
-            <tr
-              className="backlog-row"
-              key={t.id}
-              style={{ background: isSelected ? 'rgba(99,102,241,.08)' : undefined }}
-            >
-              {selectable && (
-                <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => onToggleSelect!(t.id)}
-                    style={{ cursor: 'pointer', accentColor: 'var(--accent)' }}
-                  />
-                </td>
-              )}
-              <td onClick={() => onSelect(t)}><code style={{ fontSize: 11, color: 'var(--text3)' }}>{t.taskKey}</code></td>
-              <td onClick={() => onSelect(t)}><Badge type="type" value={t.type} /></td>
-              <td onClick={() => onSelect(t)} style={{ maxWidth: 300, fontSize: 13 }}>{t.title}</td>
-              <td onClick={() => onSelect(t)}>
-                {t.epic && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.epic.color, display: 'inline-block' }} />{t.epic.title}
-                </span>}
-              </td>
-              <td onClick={() => onSelect(t)}><Badge type="priority" value={t.priority} /></td>
-              <td onClick={() => onSelect(t)}>{t.column && <span style={{ fontSize: 12, color: 'var(--text2)' }}>{t.column.name}</span>}</td>
-              <td onClick={() => onSelect(t)}>
-                <span style={{ fontSize: 12, background: 'var(--bg4)', padding: '1px 6px', borderRadius: 4, color: 'var(--text3)' }}>🎯 {t.storyPoints ?? '—'}</span>
-              </td>
-              <td onClick={() => onSelect(t)}>
-                <div className="avatar-stack">
-                  {t.assignees?.map(a => <Avatar key={a.user.id} name={a.user.name} color={a.user.color} size="sm" />)}
-                </div>
-              </td>
-              {showMoveToSprint && (
-                <td>
-                  <select
-                    value={t.sprint?.id ?? ''}
-                    onChange={e => onMoveToSprint?.(t.id, e.target.value || null)}
-                    onClick={e => e.stopPropagation()}
-                    style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text2)', cursor: 'pointer', maxWidth: 140 }}
-                  >
-                    <option value="">— Backlog</option>
-                    {(sprints as Sprint[]).map(s => (
-                      <option key={s.id} value={s.id}>{s.status === 'ACTIVE' ? '🟢 ' : '📅 '}{s.name}</option>
-                    ))}
-                  </select>
-                </td>
-              )}
-            </tr>
-          );
-        })}
+        {tasks.map(t => (
+          <TaskRow
+            key={t.id}
+            task={t}
+            onSelect={onSelect}
+            isSelected={selectable ? selectedIds!.has(t.id) : false}
+            onToggleSelect={selectable ? onToggleSelect : undefined}
+            showMoveToSprint={showMoveToSprint}
+            sprints={sprints}
+            onMoveToSprint={onMoveToSprint}
+          />
+        ))}
       </tbody>
     </table>
   );
