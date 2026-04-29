@@ -6,7 +6,6 @@ import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
 import crypto from 'crypto';
-import nodemailer from 'nodemailer';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -102,7 +101,8 @@ router.get('/me', authenticate as any, async (req: AuthRequest, res: Response) =
 });
 
 
-// ─── Forgot Password (e-mail via Gmail SMTP) ─────────────────────────────────
+// ─── Forgot Password (Gmail REST API — funciona no Render free tier) ──────────
+// O Render bloqueia SMTP (portas 25/465/587). Usamos a Gmail API via HTTPS (443).
 
 function buildEmailHtml(name: string, resetLink: string) {
   return `
@@ -126,6 +126,51 @@ function buildEmailHtml(name: string, resetLink: string) {
       <p style="color:#cbd5e1;font-size:11px;text-align:center;margin:0;">AgileFlow · Gestão ágil de projetos</p>
     </div>
   `;
+}
+
+async function sendViaGmailApi(to: string, subject: string, html: string): Promise<void> {
+  // 1. Trocar refresh_token por access_token
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id:     process.env.GMAIL_CLIENT_ID!,
+      client_secret: process.env.GMAIL_CLIENT_SECRET!,
+      refresh_token: process.env.GMAIL_REFRESH_TOKEN!,
+      grant_type:    'refresh_token',
+    }),
+  });
+  if (!tokenRes.ok) {
+    const txt = await tokenRes.text();
+    throw new Error(`OAuth token error: ${txt}`);
+  }
+  const { access_token } = await tokenRes.json() as { access_token: string };
+
+  // 2. Montar mensagem RFC 2822 e codificar em base64url
+  const raw = [
+    `From: AgileFlow <${process.env.GMAIL_USER}>`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset=utf-8',
+    '',
+    html,
+  ].join('\r\n');
+  const encoded = Buffer.from(raw).toString('base64url');
+
+  // 3. Enviar via Gmail API (HTTPS — porta 443, nunca bloqueada)
+  const sendRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ raw: encoded }),
+  });
+  if (!sendRes.ok) {
+    const txt = await sendRes.text();
+    throw new Error(`Gmail API send error: ${txt}`);
+  }
 }
 
 const ForgotSchema = z.object({
@@ -164,31 +209,18 @@ router.post('/forgot-password', async (req, res) => {
     const frontendUrl = process.env.FRONTEND_URL ?? 'https://agileflow-kappa.vercel.app';
     const resetLink   = `${frontendUrl}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
 
-    const gmailUser = process.env.GMAIL_USER;
-    const gmailPass = process.env.GMAIL_APP_PASSWORD;
+    const configured = process.env.GMAIL_CLIENT_ID
+                    && process.env.GMAIL_CLIENT_SECRET
+                    && process.env.GMAIL_REFRESH_TOKEN
+                    && process.env.GMAIL_USER;
 
-    if (!gmailUser || !gmailPass) {
-      // Modo dev: devolve o link no body para testar sem configurar email
-      console.warn('[forgot-password] Vars GMAIL não configuradas. Link:', resetLink);
+    if (!configured) {
+      // Modo dev: devolve o link no body para testar sem configurar Gmail API
+      console.warn('[forgot-password] Gmail API não configurada. Link de reset:', resetLink);
       return res.json({ success: true, _dev_link: resetLink });
     }
 
-    // Tenta porta 465 (SSL direto) — mais confiável em servidores cloud
-    const transporter = nodemailer.createTransport({
-      host:   'smtp.gmail.com',
-      port:   465,
-      secure: true,
-      family: 4, // Render não suporta IPv6 — forçar IPv4
-      auth: { user: gmailUser, pass: gmailPass },
-    } as any);
-
-    await transporter.sendMail({
-      from:    `"AgileFlow" <${gmailUser}>`,
-      to:      email,
-      subject: 'Redefinição de senha — AgileFlow',
-      html:    buildEmailHtml(user.name, resetLink),
-    });
-
+    await sendViaGmailApi(email, 'Redefinição de senha — AgileFlow', buildEmailHtml(user.name, resetLink));
     return res.json({ success: true });
 
   } catch (err: any) {
