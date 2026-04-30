@@ -1,5 +1,4 @@
 import { useEditor, EditorContent } from '@tiptap/react';
-import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';
@@ -294,34 +293,6 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
           <Btn label="↩" onClick={() => editor.chain().undo().run()} active={false} title="Desfazer (⌘Z)" />
           <Btn label="↪" onClick={() => editor.chain().redo().run()} active={false} title="Refazer" />
         </div>
-      )}
-
-      {/* ── Bubble menu (appears on text selection) ─────────────────────── */}
-      {editable && (
-        <BubbleMenu
-          editor={editor}
-          style={{
-            display: 'flex', gap: 2, padding: '4px 6px',
-            background: 'var(--bg1)', border: '1px solid var(--border)',
-            borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,.35)', zIndex: 100,
-          }}
-        >
-          <Btn label="B"  onClick={() => editor.chain().focus().toggleBold().run()}      active={editor.isActive('bold')}      title="Negrito" />
-          <Btn label="I"  onClick={() => editor.chain().focus().toggleItalic().run()}    active={editor.isActive('italic')}    title="Itálico" />
-          <Btn label="U"  onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive('underline')} title="Sublinhado" />
-          <Btn label="S̶"  onClick={() => editor.chain().focus().toggleStrike().run()}    active={editor.isActive('strike')}    title="Tachado" />
-          <Btn label="🖊" onClick={() => editor.chain().focus().toggleHighlight().run()} active={editor.isActive('highlight')} title="Destacar" />
-          <Sep />
-          <Btn label="H1" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} active={editor.isActive('heading', { level: 1 })} />
-          <Btn label="H2" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} active={editor.isActive('heading', { level: 2 })} />
-          <Sep />
-          <Btn
-            label="🔗"
-            onClick={() => { setLinkUrl(editor.getAttributes('link').href as string ?? ''); setLinkOpen(v => !v); }}
-            active={editor.isActive('link')} title="Link"
-          />
-          <Btn label="`" onClick={() => editor.chain().focus().toggleCode().run()} active={editor.isActive('code')} title="Código" />
-        </BubbleMenu>
       )}
 
       {/* ── Slash command menu ───────────────────────────────────────────── */}
