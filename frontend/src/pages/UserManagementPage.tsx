@@ -4,23 +4,29 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store/useAppStore';
 import { adminApi } from '../api';
 
-const ROLES = ['ADMIN', 'MANAGER', 'DEVELOPER', 'DESIGNER', 'VIEWER'] as const;
+const ROLES = ['ADMIN', 'PM', 'DEVELOPER', 'QA', 'UX', 'SCRUM_MASTER', 'STAKEHOLDER', 'VIEWER'] as const;
 type Role = typeof ROLES[number];
 
 const ROLE_LABELS: Record<Role, string> = {
-  ADMIN:     '🛡️ Admin',
-  MANAGER:   '📋 Manager',
-  DEVELOPER: '💻 Developer',
-  DESIGNER:  '🎨 Designer',
-  VIEWER:    '👁️ Viewer',
+  ADMIN:        '🛡️ Admin',
+  PM:           '📋 PM',
+  DEVELOPER:    '💻 Developer',
+  QA:           '🧪 QA',
+  UX:           '🎨 UX',
+  SCRUM_MASTER: '🔄 Scrum Master',
+  STAKEHOLDER:  '👁️ Stakeholder',
+  VIEWER:       '👀 Viewer',
 };
 
 const ROLE_COLORS: Record<Role, string> = {
-  ADMIN:     '#ef4444',
-  MANAGER:   '#f59e0b',
-  DEVELOPER: '#6366f1',
-  DESIGNER:  '#ec4899',
-  VIEWER:    '#6b7280',
+  ADMIN:        '#ef4444',
+  PM:           '#f59e0b',
+  DEVELOPER:    '#6366f1',
+  QA:           '#10b981',
+  UX:           '#ec4899',
+  SCRUM_MASTER: '#8b5cf6',
+  STAKEHOLDER:  '#06b6d4',
+  VIEWER:       '#6b7280',
 };
 
 const AVATAR_COLORS = [
@@ -263,7 +269,7 @@ function UserFormModal({
 
           {/* Phone */}
           <div className="input-group">
-            <label className="input-label">Telefone <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(para reset de senha via SMS)</span></label>
+            <label className="input-label">Telefone <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(opcional)</span></label>
             <input className="input" type="tel" placeholder="+55 11 99999-9999"
               value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
               style={{ width: '100%' }} />

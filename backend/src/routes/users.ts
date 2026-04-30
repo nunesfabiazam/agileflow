@@ -24,7 +24,7 @@ const UpdateSchema = z.object({
   name:      z.string().min(2).max(100).optional(),
   color:     z.string().optional(),
   avatarUrl: z.string().nullable().optional(),
-  phone:     z.string().optional(),
+  phone:     z.string().nullable().optional(),
 });
 
 router.patch('/:id', async (req: AuthRequest, res: Response) => {
