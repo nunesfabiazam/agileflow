@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
+import crypto from 'crypto';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -100,114 +101,172 @@ router.get('/me', authenticate as any, async (req: AuthRequest, res: Response) =
 });
 
 
-// ─── Forgot Password (SMS via Twilio) ────────────────────────────────────────
+// ─── Forgot Password (Gmail REST API — funciona no Render free tier) ──────────
+// O Render bloqueia SMTP (portas 25/465/587). Usamos a Gmail API via HTTPS (443).
+
+function buildEmailHtml(name: string, resetLink: string) {
+  return `
+    <div style="font-family:Inter,system-ui,sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#f8fafc;border-radius:12px;">
+      <div style="margin-bottom:24px;">
+        <span style="display:inline-block;width:40px;height:40px;background:#6366f1;border-radius:10px;font-weight:800;color:#fff;font-size:16px;line-height:40px;text-align:center;">AF</span>
+        <span style="font-size:20px;font-weight:800;color:#0f172a;vertical-align:middle;margin-left:10px;">AgileFlow</span>
+      </div>
+      <h2 style="color:#0f172a;font-size:18px;margin:0 0 8px;">Olá, ${name} 👋</h2>
+      <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 24px;">
+        Recebemos uma solicitação para redefinir a senha da sua conta.<br/>
+        Clique no botão abaixo para criar uma nova senha:
+      </p>
+      <a href="${resetLink}" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:600;font-size:14px;">
+        Redefinir minha senha
+      </a>
+      <p style="color:#94a3b8;font-size:12px;margin:24px 0 0;line-height:1.6;">
+        Este link expira em <strong>1 hora</strong>. Se você não solicitou a redefinição, ignore este e-mail.
+      </p>
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;" />
+      <p style="color:#cbd5e1;font-size:11px;text-align:center;margin:0;">AgileFlow · Gestão ágil de projetos</p>
+    </div>
+  `;
+}
+
+async function sendViaGmailApi(to: string, subject: string, html: string): Promise<void> {
+  // 1. Trocar refresh_token por access_token
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id:     process.env.GMAIL_CLIENT_ID!,
+      client_secret: process.env.GMAIL_CLIENT_SECRET!,
+      refresh_token: process.env.GMAIL_REFRESH_TOKEN!,
+      grant_type:    'refresh_token',
+    }),
+  });
+  if (!tokenRes.ok) {
+    const txt = await tokenRes.text();
+    throw new Error(`OAuth token error: ${txt}`);
+  }
+  const { access_token } = await tokenRes.json() as { access_token: string };
+
+  // 2. Montar mensagem RFC 2822 e codificar em base64url
+  // Assuntos com acentos precisam de encoded-word (RFC 2047) para não quebrar
+  const encodedSubject = `=?utf-8?b?${Buffer.from(subject).toString('base64')}?=`;
+  const raw = [
+    `From: AgileFlow <${process.env.GMAIL_USER}>`,
+    `To: ${to}`,
+    `Subject: ${encodedSubject}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset=utf-8',
+    '',
+    html,
+  ].join('\r\n');
+  const encoded = Buffer.from(raw).toString('base64url');
+
+  // 3. Enviar via Gmail API (HTTPS — porta 443, nunca bloqueada)
+  const sendRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ raw: encoded }),
+  });
+  if (!sendRes.ok) {
+    const txt = await sendRes.text();
+    throw new Error(`Gmail API send error: ${txt}`);
+  }
+}
 
 const ForgotSchema = z.object({
-  phone: z.string().min(10),
-});
-
-const VerifyTokenSchema = z.object({
-  phone: z.string().min(10),
-  token: z.string().length(6),
+  email: z.string().email(),
 });
 
 const ResetPasswordSchema = z.object({
-  phone: z.string().min(10),
-  token: z.string().length(6),
+  email:       z.string().email(),
+  token:       z.string().min(32),
   newPassword: z.string().min(6),
 });
 
 router.post('/forgot-password', async (req, res) => {
-  const parse = ForgotSchema.safeParse(req.body);
-  if (!parse.success) return res.status(400).json({ error: 'Telefone inválido.' });
-
-  const { phone } = parse.data;
-  const user = await prisma.user.findFirst({
-    where: { phone },
-    select: { id: true, resetToken: true, resetTokenExpiry: true },
-  });
-  if (!user) return res.json({ success: true }); // Don't reveal if user exists
-
-  const token = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { resetToken: token, resetTokenExpiry: expiry },
-  });
-
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken  = process.env.TWILIO_AUTH_TOKEN;
-  const fromPhone  = process.env.TWILIO_PHONE_NUMBER;
-
-  if (!accountSid || !authToken || !fromPhone) {
-    console.warn('[forgot-password] Twilio env vars not set — token:', token);
-    return res.json({ success: true, _dev_token: token });
-  }
-
   try {
-    const twilio = require('twilio')(accountSid, authToken);
-    await twilio.messages.create({
-      body: `AgileFlow: seu código de redefinição de senha é ${token}. Válido por 15 minutos.`,
-      from: fromPhone,
-      to: phone,
+    const parse = ForgotSchema.safeParse(req.body);
+    if (!parse.success) return res.status(400).json({ error: 'E-mail inválido.' });
+
+    const { email } = parse.data;
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, name: true },
     });
+
+    // Sempre retorna sucesso para não revelar se o e-mail existe
+    if (!user) return res.json({ success: true });
+
+    const token  = crypto.randomBytes(32).toString('hex');
+    const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetToken: token, resetTokenExpiry: expiry },
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL ?? 'https://agileflow-kappa.vercel.app';
+    const resetLink   = `${frontendUrl}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+
+    const configured = process.env.GMAIL_CLIENT_ID
+                    && process.env.GMAIL_CLIENT_SECRET
+                    && process.env.GMAIL_REFRESH_TOKEN
+                    && process.env.GMAIL_USER;
+
+    if (!configured) {
+      // Modo dev: devolve o link no body para testar sem configurar Gmail API
+      console.warn('[forgot-password] Gmail API não configurada. Link de reset:', resetLink);
+      return res.json({ success: true, _dev_link: resetLink });
+    }
+
+    await sendViaGmailApi(email, 'Redefinição de senha — AgileFlow', buildEmailHtml(user.name, resetLink));
+    return res.json({ success: true });
+
   } catch (err: any) {
-    console.error('[twilio]', err.message);
-    return res.status(502).json({ error: 'Falha ao enviar SMS. Verifique as configurações do Twilio.' });
+    // Loga o erro real para diagnóstico nos logs do Render
+    console.error('[forgot-password] Erro:', err.message, err.code ?? '');
+    return res.status(500).json({
+      error: 'Falha ao enviar e-mail.',
+      detail: err.message,   // temporário para diagnóstico
+      code:   err.code ?? null,
+    });
   }
-
-  return res.json({ success: true });
-});
-
-router.post('/verify-reset-token', async (req, res) => {
-  const parse = VerifyTokenSchema.safeParse(req.body);
-  if (!parse.success) return res.status(400).json({ error: 'Dados inválidos.' });
-
-  const { phone, token } = parse.data;
-  const user = await prisma.user.findFirst({
-    where: { phone },
-    select: { id: true, resetToken: true, resetTokenExpiry: true },
-  });
-
-  if (
-    !user ||
-    user.resetToken !== token ||
-    !user.resetTokenExpiry ||
-    new Date() > user.resetTokenExpiry
-  ) {
-    return res.status(400).json({ error: 'Código inválido ou expirado.' });
-  }
-
-  return res.json({ success: true });
 });
 
 router.post('/reset-password', async (req, res) => {
-  const parse = ResetPasswordSchema.safeParse(req.body);
-  if (!parse.success) return res.status(400).json({ error: 'Dados inválidos.' });
+  try {
+    const parse = ResetPasswordSchema.safeParse(req.body);
+    if (!parse.success) return res.status(400).json({ error: 'Dados inválidos.' });
 
-  const { phone, token, newPassword } = parse.data;
-  const user = await prisma.user.findFirst({
-    where: { phone },
-    select: { id: true, resetToken: true, resetTokenExpiry: true },
-  });
+    const { email, token, newPassword } = parse.data;
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, resetToken: true, resetTokenExpiry: true },
+    });
 
-  if (
-    !user ||
-    user.resetToken !== token ||
-    !user.resetTokenExpiry ||
-    new Date() > user.resetTokenExpiry
-  ) {
-    return res.status(400).json({ error: 'Código inválido ou expirado.' });
+    if (
+      !user ||
+      user.resetToken !== token ||
+      !user.resetTokenExpiry ||
+      new Date() > user.resetTokenExpiry
+    ) {
+      return res.status(400).json({ error: 'Link inválido ou expirado. Solicite um novo.' });
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashed, resetToken: null, resetTokenExpiry: null },
+    });
+
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error('[reset-password]', err.message);
+    return res.status(500).json({ error: 'Erro interno. Tente novamente.' });
   }
-
-  const hashed = await bcrypt.hash(newPassword, 10);
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { password: hashed, resetToken: null, resetTokenExpiry: null },
-  });
-
-  return res.json({ success: true });
 });
 
 export default router;

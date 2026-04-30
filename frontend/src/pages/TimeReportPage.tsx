@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { timeLogsApi } from '../api';
 
@@ -50,6 +51,7 @@ function BarChart({ data }: { data: UserSummary[] }) {
 
 export default function TimeReportPage() {
   const { activeProjectId } = useAppStore();
+  const navigate = useNavigate();
   const today = new Date().toISOString().split('T')[0];
   const monthStart = today.slice(0, 7) + '-01';
 
@@ -73,15 +75,12 @@ export default function TimeReportPage() {
   const totalMinutes = data?.totalMinutes ?? 0;
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 800, margin: '0 auto' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--text1)' }}>
-          ⏱️ Relatório de Horas
-        </h1>
-        <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text3)' }}>
-          Tempo registrado por membro no período selecionado
-        </p>
+    <div>
+      <div className="page-header">
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)}>← Voltar</button>
+        <h2>⏱️ Relatório de Horas</h2>
       </div>
+      <div style={{ maxWidth: 800 }}>
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 24, flexWrap: 'wrap' }}>
@@ -187,6 +186,7 @@ export default function TimeReportPage() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

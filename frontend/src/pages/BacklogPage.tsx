@@ -4,7 +4,7 @@ import { tasksApi, sprintsApi } from '../api';
 import type { Task, Sprint } from '../types';
 import { Badge } from '../components/Shared/Badge';
 import { Avatar } from '../components/Shared/Avatar';
-import { useState } from 'react';
+import { useState, useCallback, memo } from 'react';
 import { TaskDetailModal } from '../components/kanban/TaskDetailModal';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -20,6 +20,28 @@ export function BacklogPage() {
   const [newSprint, setNewSprint] = useState({ name: '', goal: '', startDate: '', endDate: '' });
   const [showComplete, setShowComplete] = useState<string | null>(null);
   const [moveToSprintId, setMoveToSprintId] = useState('');
+
+  // ── Bulk selection ──────────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkSprintId, setBulkSprintId] = useState('');
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback((ids: string[]) => {
+    setSelectedIds(prev => {
+      const allSelected = ids.every(id => prev.has(id));
+      if (allSelected) return new Set();
+      return new Set(ids);
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
   const { data: sprints = [] } = useQuery<Sprint[]>({
     queryKey: ['sprints', activeProjectId],
@@ -71,26 +93,73 @@ export function BacklogPage() {
     },
   });
 
+  // ── Single task move — optimistic update (sem delay) ───────────────────────
   const moveTaskMut = useMutation({
     mutationFn: ({ taskId, sprintId }: { taskId: string; sprintId: string | null }) =>
       tasksApi.update(taskId, { sprintId } as any),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks', activeProjectId] }),
+    onMutate: async ({ taskId, sprintId }) => {
+      await qc.cancelQueries({ queryKey: ['tasks', activeProjectId] });
+      const prev = qc.getQueriesData<Task[]>({ queryKey: ['tasks', activeProjectId] });
+      const targetSprint = sprintId ? (sprints as Sprint[]).find(s => s.id === sprintId) : undefined;
+      qc.setQueriesData<Task[]>({ queryKey: ['tasks', activeProjectId] }, (old) => {
+        if (!old) return old;
+        return old.map(t => t.id === taskId
+          ? { ...t, sprint: targetSprint ? { id: targetSprint.id, name: targetSprint.name } : undefined }
+          : t
+        );
+      });
+      return { prev };
+    },
+    onError: (_err, _vars, ctx: any) => {
+      ctx?.prev?.forEach(([key, data]: [any, any]) => qc.setQueryData(key, data));
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['tasks', activeProjectId] }),
+  });
+
+  // ── Bulk sprint assignment ──────────────────────────────────────────────────
+  const bulkMoveMut = useMutation({
+    mutationFn: ({ ids, sprintId }: { ids: string[]; sprintId: string | null }) =>
+      tasksApi.bulkUpdate(ids, { sprintId }),
+    onMutate: async ({ ids, sprintId }) => {
+      await qc.cancelQueries({ queryKey: ['tasks', activeProjectId] });
+      const prev = qc.getQueriesData<Task[]>({ queryKey: ['tasks', activeProjectId] });
+      const targetSprint = sprintId ? (sprints as Sprint[]).find(s => s.id === sprintId) : undefined;
+      qc.setQueriesData<Task[]>({ queryKey: ['tasks', activeProjectId] }, (old) => {
+        if (!old) return old;
+        return old.map(t => ids.includes(t.id)
+          ? { ...t, sprint: targetSprint ? { id: targetSprint.id, name: targetSprint.name } : undefined }
+          : t
+        );
+      });
+      return { prev };
+    },
+    onError: (_err, _vars, ctx: any) => {
+      ctx?.prev?.forEach(([key, data]: [any, any]) => qc.setQueryData(key, data));
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['tasks', activeProjectId] });
+      clearSelection();
+      setBulkSprintId('');
+    },
   });
 
   if (!activeProjectId) {
     return <div className="empty-state"><div className="empty-icon">📋</div><div className="empty-text">Selecione um projeto para ver o backlog.</div></div>;
   }
 
-  const backlogTasks   = tasks.filter(t => !t.sprint);
-  const activeSprints  = (sprints as Sprint[]).filter(s => s.status === 'ACTIVE');
+  const backlogTasks    = tasks.filter(t => !t.sprint);
+  const activeSprints   = (sprints as Sprint[]).filter(s => s.status === 'ACTIVE');
   const planningSprints = (sprints as Sprint[]).filter(s => s.status === 'PLANNING');
   const completedSprints = (sprints as Sprint[]).filter(s => s.status === 'COMPLETED');
-  const targetSprints  = [...activeSprints, ...planningSprints];
+  const targetSprints   = [...activeSprints, ...planningSprints];
 
   const completingSprint      = showComplete ? (sprints as Sprint[]).find(s => s.id === showComplete) : null;
   const completingSprintTasks = showComplete ? tasks.filter(t => t.sprint?.id === showComplete) : [];
   const incompleteTasks       = completingSprintTasks.filter(t => !t.column?.isDefault);
   const otherSprints          = (sprints as Sprint[]).filter(s => s.id !== showComplete && s.status !== 'COMPLETED');
+
+  const backlogIds = backlogTasks.map(t => t.id);
+  const selectedCount = [...selectedIds].filter(id => backlogIds.includes(id)).length;
 
   return (
     <div>
@@ -145,7 +214,11 @@ export function BacklogPage() {
                 <button className="btn btn-primary btn-sm" onClick={() => setShowComplete(sprint.id)}>✅ Concluir Sprint</button>
               )}
             </div>
-            <TaskTable tasks={sprintTasks} onSelect={setSelectedTask} showMoveToSprint={false} />
+            <TaskTable
+              tasks={sprintTasks}
+              onSelect={setSelectedTask}
+              showMoveToSprint={false}
+            />
           </div>
         );
       })}
@@ -155,6 +228,43 @@ export function BacklogPage() {
           <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text3)' }}>📋 Backlog ({backlogTasks.length})</div>
           {backlogTasks.length > 0 && <div style={{ fontSize: 12, color: 'var(--text3)' }}>sem sprint atribuída</div>}
         </div>
+
+        {/* ── Bulk action bar ── */}
+        {selectedCount > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'rgba(99,102,241,.1)', border: '1px solid var(--accent)',
+            borderRadius: 8, padding: '8px 14px', marginBottom: 10,
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent2)' }}>
+              {selectedCount} {selectedCount === 1 ? 'item selecionado' : 'itens selecionados'}
+            </span>
+            <div style={{ flex: 1 }} />
+            <select
+              value={bulkSprintId}
+              onChange={e => setBulkSprintId(e.target.value)}
+              style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text2)' }}
+            >
+              <option value="">— Mover para Sprint...</option>
+              <option value="__backlog__">📋 Backlog (remover sprint)</option>
+              {targetSprints.map(s => (
+                <option key={s.id} value={s.id}>{s.status === 'ACTIVE' ? '🟢 ' : '📅 '}{s.name}</option>
+              ))}
+            </select>
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={!bulkSprintId || bulkMoveMut.isPending}
+              onClick={() => {
+                const sprintId = bulkSprintId === '__backlog__' ? null : bulkSprintId;
+                bulkMoveMut.mutate({ ids: [...selectedIds].filter(id => backlogIds.includes(id)), sprintId });
+              }}
+            >
+              {bulkMoveMut.isPending ? 'Movendo...' : '✓ Aplicar'}
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={clearSelection}>✕ Cancelar</button>
+          </div>
+        )}
+
         {backlogTasks.length === 0 ? (
           <div style={{ padding: '12px 0', color: 'var(--text3)', fontSize: 13 }}>Nenhuma task no backlog.</div>
         ) : (
@@ -164,6 +274,9 @@ export function BacklogPage() {
             showMoveToSprint
             sprints={targetSprints}
             onMoveToSprint={(taskId, sprintId) => moveTaskMut.mutate({ taskId, sprintId })}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onToggleAll={() => toggleAll(backlogIds)}
           />
         )}
       </div>
@@ -251,59 +364,117 @@ export function BacklogPage() {
   );
 }
 
+// ── Memoized row — só re-renderiza quando os seus próprios dados mudam ────────
+const TaskRow = memo(function TaskRow({
+  task, onSelect, isSelected, onToggleSelect, showMoveToSprint, sprints, onMoveToSprint,
+}: {
+  task: Task;
+  onSelect: (t: Task) => void;
+  isSelected: boolean;
+  onToggleSelect?: (id: string) => void;
+  showMoveToSprint?: boolean;
+  sprints?: Sprint[];
+  onMoveToSprint?: (taskId: string, sprintId: string | null) => void;
+}) {
+  return (
+    <tr
+      className="backlog-row"
+      style={{ background: isSelected ? 'rgba(99,102,241,.08)' : undefined }}
+    >
+      {onToggleSelect && (
+        <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => onToggleSelect(task.id)}
+            style={{ cursor: 'pointer', accentColor: 'var(--accent)', width: 15, height: 15 }}
+          />
+        </td>
+      )}
+      <td onClick={() => onSelect(task)}><code style={{ fontSize: 11, color: 'var(--text3)' }}>{task.taskKey}</code></td>
+      <td onClick={() => onSelect(task)}><Badge type="type" value={task.type} /></td>
+      <td onClick={() => onSelect(task)} style={{ maxWidth: 300, fontSize: 13 }}>{task.title}</td>
+      <td onClick={() => onSelect(task)}>
+        {task.epic && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: task.epic.color, display: 'inline-block' }} />{task.epic.title}
+        </span>}
+      </td>
+      <td onClick={() => onSelect(task)}><Badge type="priority" value={task.priority} /></td>
+      <td onClick={() => onSelect(task)}>{task.column && <span style={{ fontSize: 12, color: 'var(--text2)' }}>{task.column.name}</span>}</td>
+      <td onClick={() => onSelect(task)}>
+        <span style={{ fontSize: 12, background: 'var(--bg4)', padding: '1px 6px', borderRadius: 4, color: 'var(--text3)' }}>🎯 {task.storyPoints ?? '—'}</span>
+      </td>
+      <td onClick={() => onSelect(task)}>
+        <div className="avatar-stack">
+          {task.assignees?.map(a => <Avatar key={a.user.id} name={a.user.name} color={a.user.color} size="sm" />)}
+        </div>
+      </td>
+      {showMoveToSprint && (
+        <td>
+          <select
+            value={task.sprint?.id ?? ''}
+            onChange={e => onMoveToSprint?.(task.id, e.target.value || null)}
+            onClick={e => e.stopPropagation()}
+            style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text2)', cursor: 'pointer', maxWidth: 140 }}
+          >
+            <option value="">— Backlog</option>
+            {(sprints ?? []).map(s => (
+              <option key={s.id} value={s.id}>{s.status === 'ACTIVE' ? '🟢 ' : '📅 '}{s.name}</option>
+            ))}
+          </select>
+        </td>
+      )}
+    </tr>
+  );
+});
+
 function TaskTable({
   tasks, onSelect, showMoveToSprint = false, sprints = [], onMoveToSprint,
+  selectedIds, onToggleSelect, onToggleAll,
 }: {
   tasks: Task[];
   onSelect: (t: Task) => void;
   showMoveToSprint?: boolean;
   sprints?: Sprint[];
   onMoveToSprint?: (taskId: string, sprintId: string | null) => void;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+  onToggleAll?: () => void;
 }) {
+  const selectable = !!selectedIds && !!onToggleSelect;
+  const allSelected = selectable && tasks.length > 0 && tasks.every(t => selectedIds!.has(t.id));
+  const someSelected = selectable && tasks.some(t => selectedIds!.has(t.id));
+
   if (!tasks.length) return <div style={{ padding: '12px 0', color: 'var(--text3)', fontSize: 13 }}>Nenhum item.</div>;
   return (
     <table className="backlog-table">
       <thead><tr>
+        {selectable && (
+          <th style={{ width: 36, textAlign: 'center' }}>
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
+              onChange={onToggleAll}
+              style={{ cursor: 'pointer', accentColor: 'var(--accent)' }}
+            />
+          </th>
+        )}
         <th>ID</th><th>Tipo</th><th>Título</th><th>Épico</th><th>Prioridade</th><th>Status</th><th>Pts</th><th>Responsáveis</th>
         {showMoveToSprint && <th>Sprint</th>}
       </tr></thead>
       <tbody>
         {tasks.map(t => (
-          <tr className="backlog-row" key={t.id}>
-            <td onClick={() => onSelect(t)}><code style={{ fontSize: 11, color: 'var(--text3)' }}>{t.taskKey}</code></td>
-            <td onClick={() => onSelect(t)}><Badge type="type" value={t.type} /></td>
-            <td onClick={() => onSelect(t)} style={{ maxWidth: 300, fontSize: 13 }}>{t.title}</td>
-            <td onClick={() => onSelect(t)}>
-              {t.epic && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.epic.color, display: 'inline-block' }} />{t.epic.title}
-              </span>}
-            </td>
-            <td onClick={() => onSelect(t)}><Badge type="priority" value={t.priority} /></td>
-            <td onClick={() => onSelect(t)}>{t.column && <span style={{ fontSize: 12, color: 'var(--text2)' }}>{t.column.name}</span>}</td>
-            <td onClick={() => onSelect(t)}>
-              <span style={{ fontSize: 12, background: 'var(--bg4)', padding: '1px 6px', borderRadius: 4, color: 'var(--text3)' }}>🎯 {t.storyPoints ?? '—'}</span>
-            </td>
-            <td onClick={() => onSelect(t)}>
-              <div className="avatar-stack">
-                {t.assignees?.map(a => <Avatar key={a.user.id} name={a.user.name} color={a.user.color} size="sm" />)}
-              </div>
-            </td>
-            {showMoveToSprint && (
-              <td>
-                <select
-                  value={t.sprint?.id ?? ''}
-                  onChange={e => onMoveToSprint?.(t.id, e.target.value || null)}
-                  onClick={e => e.stopPropagation()}
-                  style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text2)', cursor: 'pointer', maxWidth: 140 }}
-                >
-                  <option value="">— Backlog</option>
-                  {(sprints as Sprint[]).map(s => (
-                    <option key={s.id} value={s.id}>{s.status === 'ACTIVE' ? '🟢 ' : '📅 '}{s.name}</option>
-                  ))}
-                </select>
-              </td>
-            )}
-          </tr>
+          <TaskRow
+            key={t.id}
+            task={t}
+            onSelect={onSelect}
+            isSelected={selectable ? selectedIds!.has(t.id) : false}
+            onToggleSelect={selectable ? onToggleSelect : undefined}
+            showMoveToSprint={showMoveToSprint}
+            sprints={sprints}
+            onMoveToSprint={onMoveToSprint}
+          />
         ))}
       </tbody>
     </table>

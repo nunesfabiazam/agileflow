@@ -127,6 +127,24 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// PATCH /api/tasks/bulk — update multiple tasks at once (sprint, priority, epic)
+router.patch('/bulk', async (req: AuthRequest, res: Response) => {
+  const { ids, data } = req.body as {
+    ids: string[];
+    data: { sprintId?: string | null; priority?: string; epicId?: string | null; columnId?: string };
+  };
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ success: false, error: 'ids obrigatório.' });
+    return;
+  }
+  try {
+    await prisma.task.updateMany({ where: { id: { in: ids } }, data: data as any });
+    res.json({ success: true, updated: ids.length });
+  } catch {
+    res.status(500).json({ success: false, error: 'Erro interno.' });
+  }
+});
+
 // PATCH /api/tasks/:id
 router.patch('/:id', async (req: AuthRequest, res: Response) => {
   try {

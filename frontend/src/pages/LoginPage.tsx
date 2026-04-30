@@ -7,6 +7,8 @@ import { ForgotPasswordModal } from '../components/Auth/ForgotPasswordModal';
 export function LoginPage() {
   const navigate = useNavigate();
   const setAuth  = useAppStore(s => s.setAuth);
+  const theme    = useAppStore(s => s.theme);
+  const setTheme = useAppStore(s => s.setTheme);
 
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -33,11 +35,33 @@ export function LoginPage() {
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'var(--bg)',
+      background: 'var(--bg)', position: 'relative',
     }}>
+
+      {/* Theme toggle — top right corner */}
+      <div style={{ position: 'absolute', top: 20, right: 20 }}>
+        <button
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '7px 14px', borderRadius: 20,
+            background: 'var(--bg2)', border: '1px solid var(--border)',
+            color: 'var(--text2)', fontSize: 13, cursor: 'pointer',
+            transition: 'all .15s', boxShadow: 'var(--shadow)',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text2)'; }}
+          title={theme === 'dark' ? 'Mudar para modo claro' : 'Mudar para modo escuro'}
+        >
+          <span style={{ fontSize: 15 }}>{theme === 'dark' ? '☀️' : '🌙'}</span>
+          <span>{theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}</span>
+        </button>
+      </div>
+
       <div style={{
         width: 400, padding: 40,
         background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 16,
+        boxShadow: 'var(--shadow)',
       }}>
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32 }}>

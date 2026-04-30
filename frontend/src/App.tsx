@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useAppStore } from './store/useAppStore';
 import { Sidebar } from './components/Layout/Sidebar';
 import { LoginPage }           from './pages/LoginPage';
@@ -17,6 +18,7 @@ import { RoadmapPage }          from './pages/RoadmapPage';
 import UserManagementPage from './pages/UserManagementPage';
 import SprintAnalyticsPage from './pages/SprintAnalyticsPage';
 import TimeReportPage from './pages/TimeReportPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 
 function AuthGuard() {
   const token = useAppStore(s => s.token);
@@ -45,11 +47,21 @@ function EditorLayout() {
   );
 }
 
+function ThemeSync() {
+  const theme = useAppStore(s => s.theme);
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
+      <ThemeSync />
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login"          element={<LoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route element={<AuthGuard />}>
           <Route element={<EditorLayout />}>
             <Route path="documents/:id" element={<DocEditorPage />} />
@@ -58,8 +70,8 @@ export default function App() {
             <Route index element={<Navigate to="/kanban" replace />} />
             <Route path="projects"              element={<ProjectsPage />} />
             <Route path="projects/:id/settings" element={<ProjectSettingsPage />} />
-            <Route path="epics"                     element={<EpicsPage />} />
-            <Route path="roadmap"                   element={<RoadmapPage />} />
+            <Route path="epics"                 element={<EpicsPage />} />
+            <Route path="roadmap"               element={<RoadmapPage />} />
             <Route path="kanban"                element={<KanbanPage />} />
             <Route path="backlog"               element={<BacklogPage />} />
             <Route path="dashboard"             element={<DashboardPage />} />
@@ -67,12 +79,12 @@ export default function App() {
             <Route path="team"                  element={<TeamPage />} />
             <Route path="reports"               element={<ReportsPage />} />
             <Route path="import"                element={<ImportPage />} />
+            <Route path="admin/users"           element={<UserManagementPage />} />
+            <Route path="sprint-analytics"      element={<SprintAnalyticsPage />} />
+            <Route path="time-report"           element={<TimeReportPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
-          <Route path="/admin/users" element={<UserManagementPage />} />
-          <Route path="sprint-analytics" element={<SprintAnalyticsPage />} />
-          <Route path="time-report" element={<TimeReportPage />} />
       </Routes>
     </BrowserRouter>
   );
