@@ -1,12 +1,15 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+import { authenticate } from '../middleware/auth';
+import { AuthRequest } from '../types';
 
 const router = Router({ mergeParams: true });
 const prisma = new PrismaClient();
+router.use(authenticate as any);
 
 // GET /api/tasks/:taskId/time-logs
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', async (req: AuthRequest, res: Response) => {
   const { taskId } = req.params;
   const logs = await prisma.timeLog.findMany({
     where: { taskId },
@@ -24,12 +27,12 @@ const CreateSchema = z.object({
   date:    z.string().optional(),
 });
 
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', async (req: AuthRequest, res: Response) => {
   const parse = CreateSchema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: 'Dados inválidos.' });
 
   const { taskId } = req.params;
-  const userId = (req as any).user?.id;
+  const userId = req.user!.userId;
 
   const log = await prisma.timeLog.create({
     data: {
@@ -45,10 +48,10 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/tasks/:taskId/time-logs/:id
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const userId = (req as any).user?.id;
-  const role   = (req as any).user?.role;
+  const userId = req.user!.userId;
+  const role   = req.user!.role;
 
   const log = await prisma.timeLog.findUnique({ where: { id } });
   if (!log) return res.status(404).json({ error: 'Log não encontrado.' });
@@ -61,7 +64,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
 // ── GET /api/time-logs/report?projectId=&sprintId=&userId=&from=&to= ──────────
 export const timeReportRouter = Router();
-timeReportRouter.get('/report', async (req: Request, res: Response) => {
+timeReportRouter.use(authenticate as any);
+timeReportRouter.get('/report', async (req: AuthRequest, res: Response) => {
   const { projectId, userId, from, to } = req.query as Record<string, string>;
 
   const whereClause: any = {};
@@ -87,7 +91,7 @@ timeReportRouter.get('/report', async (req: Request, res: Response) => {
   // Group by user
   const byUser: Record<string, { user: any; totalMinutes: number; logs: any[] }> = {};
   for (const log of logs) {
-    const key = log.userId;
+    const key = log.userId ?? 'unknown';
     if (!byUser[key]) byUser[key] = { user: log.user, totalMinutes: 0, logs: [] };
     byUser[key].totalMinutes += log.minutes;
     byUser[key].logs.push({ ...log, user: undefined });
