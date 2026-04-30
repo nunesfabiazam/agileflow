@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { documentsApi, aiApi } from '../api';
+import { documentsApi } from '../api';
 import { useAppStore } from '../store/useAppStore';
 import { TiptapEditor } from '../components/docs/TiptapEditor';
 import { Avatar } from '../components/Shared/Avatar';
@@ -32,10 +32,6 @@ export function DocEditorPage() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [ready, setReady]     = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [rightTab, setRightTab]         = useState<'meta' | 'ai'>('meta');
-  const [aiDocLoading, setAiDocLoading] = useState<string | null>(null);
-  const [aiDocResult, setAiDocResult]   = useState<string | null>(null);
-  const [aiDocAction, setAiDocAction]   = useState('');
 
   const { data: doc } = useQuery<Document | undefined>({
     queryKey: ['doc', id],
@@ -131,22 +127,7 @@ export function DocEditorPage() {
             placeholder="Comece a escrever aqui... Use a barra de ferramentas para formatar." />
         </div>
         <div style={{ width:220, borderLeft:'1px solid var(--border)', padding:'16px 14px', overflow:'auto', background:'var(--bg2)', flexShrink:0 }}>
-          {/* Tab header */}
-          <div style={{ display:'flex', gap:4, marginBottom:14 }}>
-            <button onClick={() => setRightTab('meta')}
-              style={{ flex:1, padding:'5px 4px', borderRadius:6, fontSize:11, fontWeight:600,
-                background: rightTab==='meta' ? 'var(--accent)' : 'var(--bg4)',
-                color: rightTab==='meta' ? '#fff' : 'var(--text3)', border:'none', cursor:'pointer' }}>
-              Detalhes
-            </button>
-            <button onClick={() => setRightTab('ai')}
-              style={{ flex:1, padding:'5px 4px', borderRadius:6, fontSize:11, fontWeight:600,
-                background: rightTab==='ai' ? '#7c3aed' : 'var(--bg4)',
-                color: rightTab==='ai' ? '#fff' : 'var(--text3)', border:'none', cursor:'pointer' }}>
-              ✨ IA
-            </button>
-          </div>
-          {rightTab === 'meta' && (<>
+          <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', color:'var(--text3)', marginBottom:14 }}>Detalhes</div>
           <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:10, padding:'8px 10px', background:'var(--bg3)', borderRadius:8 }}>
             <span style={{ fontSize:20 }}>{typeInfo.icon}</span>
             <div><div style={{ fontSize:12, fontWeight:600 }}>{typeInfo.label}</div><div style={{ fontSize:11, color:'var(--text3)' }}>Tipo</div></div>
@@ -171,71 +152,6 @@ export function DocEditorPage() {
                   <div style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>{lt.task.title}</div>
                 </div>
               ))}
-            </div>
-          )}
-          </>)}
-
-          {rightTab === 'ai' && (
-            <div>
-              <div style={{ fontSize:11, color:'var(--text3)', marginBottom:14, lineHeight:1.5 }}>
-                Use IA para trabalhar com o conteúdo deste documento.
-              </div>
-              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                <button className="btn btn-ghost"
-                  style={{ fontSize:12, justifyContent:'flex-start', textAlign:'left' }}
-                  disabled={!!aiDocLoading}
-                  onClick={async () => {
-                    setAiDocLoading('summarize'); setAiDocResult(null);
-                    try {
-                      const res = await aiApi.assist('summarize-doc', { title, content });
-                      setAiDocResult(res.data.data.result); setAiDocAction('summarize');
-                    } catch (e: any) {
-                      setAiDocResult('Erro: ' + (e?.response?.data?.error ?? e?.message));
-                      setAiDocAction('error');
-                    } finally { setAiDocLoading(null); }
-                  }}
-                >{aiDocLoading === 'summarize' ? '⏳ Resumindo...' : '📋 Resumir documento'}</button>
-
-                <button className="btn btn-ghost"
-                  style={{ fontSize:12, justifyContent:'flex-start', textAlign:'left' }}
-                  disabled={!!aiDocLoading}
-                  onClick={async () => {
-                    setAiDocLoading('improve'); setAiDocResult(null);
-                    try {
-                      const plain = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 3000);
-                      const res = await aiApi.assist('improve-text', { text: plain });
-                      setAiDocResult(res.data.data.result); setAiDocAction('improve');
-                    } catch (e: any) {
-                      setAiDocResult('Erro: ' + (e?.response?.data?.error ?? e?.message));
-                      setAiDocAction('error');
-                    } finally { setAiDocLoading(null); }
-                  }}
-                >{aiDocLoading === 'improve' ? '⏳ Melhorando...' : '✨ Melhorar texto'}</button>
-              </div>
-
-              {aiDocResult && (
-                <div style={{ marginTop:14, background:'var(--bg3)', borderRadius:8, padding:12 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:'var(--text3)', marginBottom:8 }}>
-                    {aiDocAction==='summarize' ? '📋 Resumo' : aiDocAction==='improve' ? '✨ Texto melhorado' : '⚠️ Resultado'}
-                  </div>
-                  <div style={{ fontSize:12, color:'var(--text2)', lineHeight:1.6, whiteSpace:'pre-wrap', maxHeight:280, overflow:'auto' }}>
-                    {aiDocResult}
-                  </div>
-                  {aiDocAction === 'improve' && (
-                    <button className="btn btn-primary btn-sm"
-                      style={{ marginTop:8, width:'100%', justifyContent:'center', fontSize:11 }}
-                      onClick={() => {
-                        handleContentChange('<p>' + aiDocResult.split('\n\n').join('</p><p>') + '</p>');
-                        setAiDocResult(null);
-                      }}
-                    >Aplicar ao documento</button>
-                  )}
-                  <button className="btn btn-ghost btn-sm"
-                    style={{ marginTop:4, width:'100%', fontSize:11, color:'var(--text3)' }}
-                    onClick={() => setAiDocResult(null)}
-                  >Fechar</button>
-                </div>
-              )}
             </div>
           )}
         </div>

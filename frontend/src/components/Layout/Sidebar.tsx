@@ -27,7 +27,7 @@ export function Sidebar() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, sidebarCollapsed, activeProjectId, setActiveProject, addRecentProject, theme, setTheme } = useAppStore();
+  const { user, logout, sidebarCollapsed, activeProjectId, setActiveProject, addRecentProject } = useAppStore();
   const [showProjects, setShowProjects] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -221,15 +221,6 @@ export function Sidebar() {
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg3)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                   >✏️ Editar perfil</button>
-                  <button
-                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text1)', textAlign: 'left', justifyContent: 'space-between' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg3)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    <span>{theme === 'dark' ? '☀️ Modo Claro' : '🌙 Modo Escuro'}</span>
-                    <span style={{ fontSize: 11, background: 'var(--bg4)', color: 'var(--text3)', borderRadius: 4, padding: '1px 6px' }}>{theme === 'dark' ? 'claro' : 'escuro'}</span>
-                  </button>
                   <button
                     onClick={() => { logout(); setShowUserMenu(false); }}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#ef4444', textAlign: 'left' }}

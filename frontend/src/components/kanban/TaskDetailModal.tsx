@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { tasksApi, documentsApi, aiApi } from '../../api';
+import { tasksApi, documentsApi } from '../../api';
 import type { Task, KanbanColumn, Document } from '../../types';
 import { Badge } from '../Shared/Badge';
 import { Avatar } from '../Shared/Avatar';
@@ -37,8 +37,6 @@ export function TaskDetailModal({ task, projectId, onClose }: Props) {
   const [showDepPicker, setShowDepPicker] = useState(false);
   const [depPickerMode, setDepPickerMode] = useState<'blocker' | 'blocking'>('blocker');
   const [depSearch, setDepSearch] = useState('');
-  const [aiLoading, setAiLoading] = useState<string | null>(null);
-  const [aiError, setAiError]     = useState<string | null>(null);
 
   const { data: freshTask } = useQuery<Task>({
     queryKey: ['task-detail', task.id],
@@ -153,26 +151,8 @@ export function TaskDetailModal({ task, projectId, onClose }: Props) {
 
             {/* Description */}
             <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ marginBottom: 6 }}>
                 <div className="section-title" style={{ marginBottom: 0 }}>Descrição</div>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ fontSize: 11, color: '#a78bfa' }}
-                  disabled={!!aiLoading}
-                  onClick={async () => {
-                    setAiLoading('description'); setAiError(null);
-                    try {
-                      const res = await aiApi.assist('task-description', {
-                        title: displayTask.title, type: displayTask.type,
-                        epic: (displayTask as any).epic?.title ?? '',
-                      });
-                      await tasksApi.update(task.id, { description: res.data.data.result });
-                      qc.invalidateQueries({ queryKey: ['task-detail', task.id] });
-                      qc.invalidateQueries({ queryKey: ['tasks', projectId] });
-                    } catch (e: any) { setAiError(e?.response?.data?.error ?? 'Erro na IA'); }
-                    finally { setAiLoading(null); }
-                  }}
-                >{aiLoading === 'description' ? '⏳' : '✨ IA'}</button>
               </div>
               <div style={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, padding: 14, fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, minHeight: 60 }}>
                 {displayTask.description ?? <span style={{ color: 'var(--text3)' }}>Sem descrição.</span>}
@@ -181,32 +161,10 @@ export function TaskDetailModal({ task, projectId, onClose }: Props) {
 
             {/* Criteria */}
             <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ marginBottom: 8 }}>
                 <div className="section-title" style={{ marginBottom: 0 }}>
                   Critérios de Aceite {totalCriteria > 0 && <span style={{ fontSize: 11, color: 'var(--text3)' }}>({doneCriteria}/{totalCriteria})</span>}
                 </div>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ fontSize: 11, color: '#a78bfa' }}
-                  disabled={!!aiLoading}
-                  onClick={async () => {
-                    setAiLoading('criteria'); setAiError(null);
-                    try {
-                      const res = await aiApi.assist('suggest-criteria', {
-                        title: displayTask.title,
-                        description: displayTask.description ?? '',
-                      });
-                      const lines = res.data.data.result.split('\n').filter((l: string) => l.trim());
-                      const existing = (freshTask?.criteria ?? []).map(c => ({ text: c.text, isDone: c.isDone }));
-                      await tasksApi.update(task.id, {
-                        criteria: [...existing, ...lines.map((l: string) => ({ text: l.trim(), isDone: false }))] as any,
-                      });
-                      qc.invalidateQueries({ queryKey: ['task-detail', task.id] });
-                      qc.invalidateQueries({ queryKey: ['tasks', projectId] });
-                    } catch (e: any) { setAiError(e?.response?.data?.error ?? 'Erro na IA'); }
-                    finally { setAiLoading(null); }
-                  }}
-                >{aiLoading === 'criteria' ? '⏳' : '✨ Sugerir'}</button>
               </div>
               <div className="card-sm">
                 {criteria.map(c => (
@@ -341,30 +299,6 @@ export function TaskDetailModal({ task, projectId, onClose }: Props) {
 
             <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowEdit(true)}>✏️ Editar Task</button>
-              <button
-                className="btn btn-ghost btn-sm"
-                style={{ width: '100%', justifyContent: 'center', color: '#a78bfa', fontSize: 12 }}
-                disabled={!!aiLoading}
-                onClick={async () => {
-                  setAiLoading('points'); setAiError(null);
-                  try {
-                    const res = await aiApi.assist('estimate-points', {
-                      title: displayTask.title, type: displayTask.type,
-                      description: displayTask.description ?? '',
-                      criteria: (freshTask?.criteria ?? []).map(c => c.text).join('; '),
-                    });
-                    const parsed = JSON.parse(res.data.data.result);
-                    await tasksApi.update(task.id, { storyPoints: parsed.points });
-                    qc.invalidateQueries({ queryKey: ['task-detail', task.id] });
-                    qc.invalidateQueries({ queryKey: ['tasks', projectId] });
-                    alert(`🎯 ${parsed.points} pts — ${parsed.justification}`);
-                  } catch (e: any) { setAiError(e?.response?.data?.error ?? 'Erro na IA'); }
-                  finally { setAiLoading(null); }
-                }}
-              >{aiLoading === 'points' ? '⏳ Estimando...' : '✨ Estimar Pontos'}</button>
-              {aiError && (
-                <div style={{ fontSize: 11, color: '#ef4444', textAlign: 'center', marginTop: 4 }}>{aiError}</div>
-              )}
             </div>
           </div>
         </div>

@@ -138,12 +138,6 @@ export const notificationsApi = {
   remove:      (id: string) => api.delete(`/notifications/${id}`),
 };
 
-// ─── AI ──────────────────────────────────────────────────────────────────────
-export const aiApi = {
-  assist: (action: string, context: Record<string, any>) =>
-    api.post<{ success: boolean; data: { result: string } }>('/ai/assist', { action, context }),
-};
-
 export const adminApi = {
   list:   ()                          => api.get('/admin/users'),
   create: (data: Record<string, any>) => api.post('/admin/users', data),

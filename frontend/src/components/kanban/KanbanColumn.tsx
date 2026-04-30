@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { useDroppable } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { KanbanColumn, Task } from '../../types';
 import { TaskCard } from './TaskCard';
 
@@ -16,25 +16,12 @@ interface Props {
   isDragOver?: boolean;
 }
 
-export function KanbanColumnComp({
-  column, tasks, onTaskClick, onRename, onRemove,
-  isEditing, onStartEdit, onCancelEdit, isDragOver,
-}: Props) {
+export function KanbanColumnComp({ column, tasks, onTaskClick, onRename, onRemove, isEditing, onStartEdit, onCancelEdit, isDragOver }: Props) {
   const [label, setLabel] = useState(column.name);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // useSortable makes this column both draggable (for reorder) and droppable (for task drops)
-  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
-    id: column.id,
-    data: { type: 'column' },
-  });
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
+  const { setNodeRef, isOver: isOverDrop } = useDroppable({ id: column.id });
+  const isOver = isOverDrop || isDragOver;
 
   useEffect(() => { if (isEditing) inputRef.current?.focus(); }, [isEditing]);
   useEffect(() => { setLabel(column.name); }, [column.name]);
@@ -45,39 +32,13 @@ export function KanbanColumnComp({
     <div
       ref={setNodeRef}
       style={{
-        ...style,
-        width: 280,
-        background: isDragOver ? 'var(--bg3)' : 'var(--bg2)',
-        borderRadius: 10,
-        border: `1px solid ${isDragOver ? 'var(--accent)' : 'var(--border)'}`,
-        flexShrink: 0,
-        overflow: 'hidden',
+        width: 280, background: isOver ? 'var(--bg3)' : 'var(--bg2)', borderRadius: 10,
+        border: `1px solid ${isOver ? 'var(--accent)' : 'var(--border)'}`, flexShrink: 0,
+        transition: 'all .15s', overflow: 'hidden',
       }}
     >
       {/* Header */}
-      <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 6, borderBottom: '1px solid var(--border)' }}>
-
-        {/* Drag handle — grab here to reorder column */}
-        <div
-          {...attributes}
-          {...listeners}
-          title="Arrastar para reordenar"
-          style={{
-            cursor: isDragging ? 'grabbing' : 'grab',
-            color: 'var(--text3)',
-            fontSize: 14,
-            padding: '2px 3px',
-            borderRadius: 3,
-            flexShrink: 0,
-            lineHeight: 1,
-            userSelect: 'none',
-            opacity: 0.4,
-            transition: 'opacity .15s',
-          }}
-          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-          onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
-        >⠿</div>
-
+      <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 6, borderBottom: '1px solid var(--border)' }}>
         <div style={{ width: 10, height: 10, borderRadius: '50%', background: column.color, flexShrink: 0 }} />
 
         {isEditing ? (
@@ -98,6 +59,7 @@ export function KanbanColumnComp({
         )}
 
         <span style={{ background: 'var(--bg4)', color: 'var(--text3)', fontSize: 11, padding: '1px 7px', borderRadius: 10 }}>{tasks.length}</span>
+
         <button onClick={onStartEdit} className="btn btn-sm" style={{ padding: '2px 4px', fontSize: 11, color: 'var(--text3)' }} title="Renomear">✏️</button>
         <button onClick={() => setConfirmRemove(true)} className="btn btn-sm" style={{ padding: '2px 4px', fontSize: 11, color: 'var(--text3)' }} title="Remover">🗑️</button>
       </div>
@@ -107,12 +69,10 @@ export function KanbanColumnComp({
         <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
           {tasks.map(t => <TaskCard key={t.id} task={t} onClick={onTaskClick} />)}
         </SortableContext>
-        {tasks.length === 0 && (
-          <div style={{ color: 'var(--text3)', fontSize: 12, textAlign: 'center', padding: '20px 0' }}>Vazio</div>
-        )}
+        {tasks.length === 0 && <div style={{ color: 'var(--text3)', fontSize: 12, textAlign: 'center', padding: '20px 0' }}>Vazio</div>}
       </div>
 
-      {/* Confirm remove */}
+      {/* Confirm remove dialog */}
       {confirmRemove && (
         <div style={{ padding: '12px 14px', background: 'var(--bg4)', borderTop: '1px solid var(--border)' }}>
           <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 8 }}>Remover coluna "{column.name}"? Tasks serão movidas para o backlog.</div>

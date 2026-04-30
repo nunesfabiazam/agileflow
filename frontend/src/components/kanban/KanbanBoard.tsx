@@ -1,10 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  DndContext, DragEndEvent, DragOverEvent, DragOverlay, DragStartEvent,
-  PointerSensor, useSensor, useSensors,
-} from '@dnd-kit/core';
-import { SortableContext, horizontalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { DndContext, DragEndEvent, DragOverEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { columnsApi, tasksApi } from '../../api';
 import { useAppStore } from '../../store/useAppStore';
 import type { Task, KanbanColumn } from '../../types';
@@ -21,20 +17,19 @@ export function KanbanBoard({ projectId, sprintId }: Props) {
   const qc = useQueryClient();
   const user = useAppStore(s => s.user);
   const [activeTask,   setActiveTask]   = useState<Task | null>(null);
-  const [activeCol,    setActiveCol]    = useState<KanbanColumn | null>(null);
   const [overColId,    setOverColId]    = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [showAddCol,   setShowAddCol]   = useState(false);
-  const [showNewTask,  setShowNewTask]  = useState(false);
+  const [showAddCol, setShowAddCol] = useState(false);
+  const [showNewTask, setShowNewTask] = useState(false);
   const [editingColId, setEditingColId] = useState<string | null>(null);
-  const [filters,      setFilters]      = useState<FilterState>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const { data: colsData } = useQuery({
     queryKey: ['columns', projectId],
     queryFn: () => columnsApi.list(projectId).then(r => r.data.data ?? []),
-    staleTime: 2 * 60_000,
+    staleTime: 2 * 60_000, // columns rarely change — cache for 2 min
   });
 
   const { data: tasksData } = useQuery({
@@ -42,8 +37,8 @@ export function KanbanBoard({ projectId, sprintId }: Props) {
     queryFn: () => tasksApi.list({ projectId, ...(sprintId ? { sprintId } : {}) }).then(r => r.data.data ?? []),
   });
 
-  const cols  = (colsData  ?? []) as KanbanColumn[];
-  const tasks = (tasksData ?? []) as Task[];
+  const cols = colsData ?? [];
+  const tasks = tasksData ?? [];
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((task: Task) => {
@@ -64,12 +59,14 @@ export function KanbanBoard({ projectId, sprintId }: Props) {
   const hasActiveFilter = filters.search || filters.myTasks
     || filters.priorities.length > 0 || filters.types.length > 0 || filters.epicId;
 
-  // ── Task reorder mutation ──────────────────────────────────────────────────
   const reorderMut = useMutation({
     mutationFn: tasksApi.reorder,
     onMutate: async (updates) => {
+      // Cancel any outgoing refetches to avoid overwriting optimistic update
       await qc.cancelQueries({ queryKey: ['tasks', projectId] });
+      // Snapshot all matching task caches
       const prevEntries = qc.getQueriesData<Task[]>({ queryKey: ['tasks', projectId] });
+      // Apply optimistic update to every matching cache entry
       qc.setQueriesData<Task[]>({ queryKey: ['tasks', projectId] }, (old) => {
         if (!old) return old;
         return old.map((t: Task) => {
@@ -82,16 +79,14 @@ export function KanbanBoard({ projectId, sprintId }: Props) {
       return { prevEntries };
     },
     onError: (_err: any, _vars: any, ctx: any) => {
-      ctx?.prevEntries?.forEach(([key, data]: [any, any]) => qc.setQueryData(key, data));
+      // Rollback all cache entries on error
+      ctx?.prevEntries?.forEach(([key, data]: [any, any]) => {
+        qc.setQueryData(key, data);
+      });
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ['tasks', projectId] }),
-  });
-
-  // ── Column reorder mutation ────────────────────────────────────────────────
-  const reorderColMut = useMutation({
-    mutationFn: columnsApi.reorder,
-    onError: () => qc.invalidateQueries({ queryKey: ['columns', projectId] }),
-    onSettled: () => qc.invalidateQueries({ queryKey: ['columns', projectId] }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['tasks', projectId] });
+    },
   });
 
   const updateColMut = useMutation({
@@ -107,60 +102,39 @@ export function KanbanBoard({ projectId, sprintId }: Props) {
     },
   });
 
-  // over.id can be a column id OR a task id inside a column
+  // Resolve over.id → column id (over can be a column OR a task inside a column)
   const resolveColId = useCallback((overId: string): string | null => {
-    if (cols.find(c => c.id === overId)) return overId;
+    if (cols.find(c => c.id === overId)) return overId;           // dropped on column
     const overTask = tasks.find((t: Task) => t.id === overId);
-    return overTask?.column?.id ?? null;
+    return overTask?.column?.id ?? null;                          // dropped on a task
   }, [cols, tasks]);
 
   const handleDragStart = useCallback((e: DragStartEvent) => {
-    const type = (e.active.data.current as any)?.type;
-    if (type === 'column') {
-      const col = cols.find(c => c.id === String(e.active.id));
-      if (col) { setActiveCol(col); return; }
-    }
-    const task = tasks.find((t: Task) => t.id === String(e.active.id));
+    const task = tasks.find((t: Task) => t.id === e.active.id);
     if (task) setActiveTask(task);
-  }, [tasks, cols]);
+  }, [tasks]);
 
   const handleDragOver = useCallback((e: DragOverEvent) => {
-    // skip column drags — we don't want overColId highlighted when reordering columns
-    if ((e.active.data.current as any)?.type === 'column') return;
     if (!e.over) { setOverColId(null); return; }
     setOverColId(resolveColId(String(e.over.id)));
   }, [resolveColId]);
 
   const handleDragEnd = useCallback((e: DragEndEvent) => {
-    const { active, over } = e;
     setActiveTask(null);
-    setActiveCol(null);
     setOverColId(null);
+    const { active, over } = e;
     if (!over) return;
 
-    const type = (active.data.current as any)?.type;
-
-    // ── Column reorder ───────────────────────────────────────────────────────
-    if (type === 'column') {
-      const oldIndex = cols.findIndex(c => c.id === String(active.id));
-      const newIndex = cols.findIndex(c => c.id === String(over.id));
-      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
-      const newCols = arrayMove([...cols], oldIndex, newIndex);
-      // Optimistic update
-      qc.setQueryData(['columns', projectId], newCols.map((c, i) => ({ ...c, order: i })));
-      reorderColMut.mutate(newCols.map((c, i) => ({ id: c.id, order: i })));
-      return;
-    }
-
-    // ── Task move ───────────────────────────────────────────────────────────
     const taskId   = String(active.id);
     const newColId = resolveColId(String(over.id));
     if (!newColId) return;
+
     const task = tasks.find((t: Task) => t.id === taskId);
     if (!task || task.column?.id === newColId) return;
+
     const colTasks = tasks.filter((t: Task) => t.column?.id === newColId);
     reorderMut.mutate([{ id: taskId, columnId: newColId, order: colTasks.length }]);
-  }, [tasks, cols, reorderMut, reorderColMut, resolveColId, qc, projectId]);
+  }, [tasks, cols, reorderMut, resolveColId]);
 
   const handleRenameCol = useCallback((colId: string, name: string) => {
     updateColMut.mutate({ id: colId, data: { name } });
@@ -185,45 +159,39 @@ export function KanbanBoard({ projectId, sprintId }: Props) {
       <KanbanFilterBar projectId={projectId} filters={filters} onChange={setFilters} />
 
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
-        <SortableContext items={cols.map(c => c.id)} strategy={horizontalListSortingStrategy}>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', overflowX: 'auto', paddingBottom: 12 }}>
-            {cols.map((col: KanbanColumn) => (
-              <KanbanColumnComp
-                key={col.id}
-                column={col}
-                tasks={filteredTasks.filter((t: Task) => t.column?.id === col.id)}
-                onTaskClick={setSelectedTask}
-                onRename={handleRenameCol}
-                onRemove={(id) => removeColMut.mutate(id)}
-                isEditing={editingColId === col.id}
-                onStartEdit={() => setEditingColId(col.id)}
-                onCancelEdit={() => setEditingColId(null)}
-                isDragOver={overColId === col.id && !activeCol}
-              />
-            ))}
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', overflowX: 'auto', paddingBottom: 12 }}>
+          {cols.map((col: KanbanColumn) => (
+            <KanbanColumnComp
+              key={col.id}
+              column={col}
+              tasks={filteredTasks.filter((t: Task) => t.column?.id === col.id)}
+              onTaskClick={setSelectedTask}
+              onRename={handleRenameCol}
+              onRemove={(id) => removeColMut.mutate(id)}
+              isEditing={editingColId === col.id}
+              onStartEdit={() => setEditingColId(col.id)}
+              onCancelEdit={() => setEditingColId(null)}
+              isDragOver={overColId === col.id}
+            />
+          ))}
 
-            <div
-              onClick={() => setShowAddCol(true)}
-              style={{
-                width: 200, minHeight: 80, border: '2px dashed var(--border)', borderRadius: 10,
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                gap: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 13, flexShrink: 0, transition: 'all .15s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLDivElement).style.color = 'var(--accent2)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.color = 'var(--text3)'; }}
-            >
-              <span style={{ fontSize: 22 }}>＋</span>
-              <span>Adicionar Coluna</span>
-            </div>
+          <div
+            onClick={() => setShowAddCol(true)}
+            style={{
+              width: 200, minHeight: 80, border: '2px dashed var(--border)', borderRadius: 10,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 13, flexShrink: 0, transition: 'all .15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLDivElement).style.color = 'var(--accent2)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.color = 'var(--text3)'; }}
+          >
+            <span style={{ fontSize: 22 }}>＋</span>
+            <span>Adicionar Coluna</span>
           </div>
-        </SortableContext>
+        </div>
 
         <DragOverlay>
-          {activeCol
-            ? <ColumnDragGhost column={activeCol} taskCount={filteredTasks.filter(t => t.column?.id === activeCol.id).length} />
-            : activeTask
-            ? <TaskCard task={activeTask} onClick={() => {}} isDragging />
-            : null}
+          {activeTask ? <TaskCard task={activeTask} onClick={() => {}} isDragging /> : null}
         </DragOverlay>
       </DndContext>
 
@@ -243,29 +211,8 @@ export function KanbanBoard({ projectId, sprintId }: Props) {
       )}
 
       <p style={{ marginTop: 12, fontSize: 12, color: 'var(--text3)' }}>
-        💡 Dica: arraste pelo ícone ⠿ no cabeçalho para reordenar colunas. Duplo clique no nome para renomear.
+        💡 Dica: duplo clique no nome de uma coluna para renomear. Arraste os cards entre colunas para mover.
       </p>
-    </div>
-  );
-}
-
-// Ghost preview rendered inside DragOverlay while a column is being dragged
-function ColumnDragGhost({ column, taskCount }: { column: KanbanColumn; taskCount: number }) {
-  return (
-    <div style={{
-      width: 280, background: 'var(--bg2)', borderRadius: 10,
-      border: `2px solid var(--accent)`, flexShrink: 0,
-      opacity: 0.85, boxShadow: '0 12px 32px rgba(99,102,241,.35)',
-      overflow: 'hidden',
-    }}>
-      <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 6, borderBottom: '1px solid var(--border)' }}>
-        <div style={{ width: 10, height: 10, borderRadius: '50%', background: column.color, flexShrink: 0 }} />
-        <span style={{ flex: 1, fontWeight: 600, fontSize: 13 }}>{column.name}</span>
-        <span style={{ background: 'var(--bg4)', color: 'var(--text3)', fontSize: 11, padding: '1px 7px', borderRadius: 10 }}>{taskCount}</span>
-      </div>
-      <div style={{ padding: '10px 14px', color: 'var(--text3)', fontSize: 12, textAlign: 'center' }}>
-        {taskCount} {taskCount === 1 ? 'card' : 'cards'}
-      </div>
     </div>
   );
 }

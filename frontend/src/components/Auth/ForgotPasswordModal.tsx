@@ -6,116 +6,176 @@ interface Props {
 }
 
 export function ForgotPasswordModal({ onClose }: Props) {
-  const [email,   setEmail]   = useState('');
+  const [step, setStep]       = useState<'phone' | 'token' | 'password' | 'done'>('phone');
+  const [phone, setPhone]     = useState('');
+  const [token, setToken]     = useState('');
+  const [newPwd, setNewPwd]   = useState('');
+  const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState<string | null>(null);
-  const [sent,    setSent]    = useState(false);
+  const [error, setError]     = useState<string | null>(null);
 
-  const handleSend = async () => {
-    if (!email.trim()) return setError('Informe seu e-mail.');
-    setLoading(true);
-    setError(null);
+  const handleSendCode = async () => {
+    if (!phone.trim()) return setError('Informe seu telefone.');
+    setLoading(true); setError(null);
     try {
-      await (authApi as any).forgotPassword(email.trim());
-      setSent(true);
+      await (authApi as any).forgotPassword(phone.trim());
+      setStep('token');
     } catch (e: any) {
-      setError(e?.response?.data?.error ?? 'Erro ao enviar e-mail. Tente novamente.');
-    } finally {
-      setLoading(false);
-    }
+      setError(e?.response?.data?.error ?? 'Erro ao enviar SMS.');
+    } finally { setLoading(false); }
   };
+
+  const handleVerifyToken = async () => {
+    if (token.length !== 6) return setError('Digite o código de 6 dígitos.');
+    setLoading(true); setError(null);
+    try {
+      await (authApi as any).verifyResetToken(phone.trim(), token);
+      setStep('password');
+    } catch (e: any) {
+      setError(e?.response?.data?.error ?? 'Código inválido.');
+    } finally { setLoading(false); }
+  };
+
+  const handleReset = async () => {
+    if (newPwd.length < 6) return setError('Senha deve ter ao menos 6 caracteres.');
+    if (newPwd !== confirm) return setError('Senhas não coincidem.');
+    setLoading(true); setError(null);
+    try {
+      await (authApi as any).resetPassword(phone.trim(), token, newPwd);
+      setStep('done');
+    } catch (e: any) {
+      setError(e?.response?.data?.error ?? 'Erro ao redefinir senha.');
+    } finally { setLoading(false); }
+  };
+
+  const steps = ['phone', 'token', 'password'] as const;
+  const stepIdx = steps.indexOf(step as any);
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ width: 400, padding: 36 }}>
-
+      <div className="modal" style={{ width: 380, padding: 32 }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 17 }}>
-              {sent ? '📬 E-mail enviado!' : '🔐 Redefinir senha'}
+              {step === 'done' ? '✅ Senha redefinida' : '🔐 Redefinir senha'}
             </div>
-            <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 4 }}>
-              {sent
-                ? `Verifique a caixa de entrada de ${email}`
-                : 'Informe seu e-mail para receber o link de redefinição'}
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 3 }}>
+              {step === 'phone'    && 'Informe o telefone cadastrado na conta'}
+              {step === 'token'    && `Código enviado para ${phone}`}
+              {step === 'password' && 'Crie sua nova senha'}
+              {step === 'done'     && 'Sua senha foi alterada com sucesso!'}
             </div>
           </div>
-          <button onClick={onClose} style={{ color: 'var(--text3)', fontSize: 18, lineHeight: 1, marginLeft: 12 }}>✕</button>
+          <button onClick={onClose} style={{ color: 'var(--text3)', fontSize: 18 }}>✕</button>
         </div>
 
-        {!sent ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Step indicators */}
+        {step !== 'done' && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 24 }}>
+            {steps.map((s, i) => (
+              <div key={s} style={{
+                flex: 1, height: 3, borderRadius: 2,
+                background: stepIdx >= i ? 'var(--accent)' : 'var(--bg4, var(--border))',
+                transition: 'background 0.3s',
+              }} />
+            ))}
+          </div>
+        )}
+
+        {/* Step: Phone */}
+        {step === 'phone' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div className="input-group">
-              <label className="input-label">E-mail cadastrado</label>
+              <label className="input-label">Telefone (com DDD e código do país)</label>
               <input
-                type="email"
-                placeholder="ana@empresa.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSend()}
+                className="input"
+                type="tel"
+                placeholder="+55 11 99999-9999"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSendCode()}
                 style={{ width: '100%' }}
                 autoFocus
               />
             </div>
-
-            {error && (
-              <div style={{
-                background: '#ef444420', border: '1px solid #ef4444',
-                borderRadius: 6, padding: '8px 12px', fontSize: 13, color: '#f87171',
-              }}>
-                {error}
-              </div>
-            )}
-
-            <button
-              className="btn btn-primary btn-lg"
-              style={{ width: '100%', justifyContent: 'center' }}
-              onClick={handleSend}
-              disabled={loading}
-            >
-              {loading
-                ? <><div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Enviando...</>
-                : '📧 Enviar link de redefinição'}
+            {error && <div style={{ background: '#ef444420', border: '1px solid #ef4444', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: '#f87171' }}>{error}</div>}
+            <button className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }}
+              onClick={handleSendCode} disabled={loading}>
+              {loading ? '⏳ Enviando SMS...' : '📱 Enviar código por SMS'}
             </button>
-
-            <button
-              className="btn btn-ghost"
-              style={{ width: '100%', justifyContent: 'center' }}
-              onClick={onClose}
-            >
+            <button className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center' }} onClick={onClose}>
               Cancelar
             </button>
           </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{
-              background: 'var(--bg3)', borderRadius: 10, padding: 20,
-              display: 'flex', flexDirection: 'column', gap: 10,
-            }}>
-              <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7 }}>
-                Enviamos um link de redefinição para <strong style={{ color: 'var(--text)' }}>{email}</strong>.
-                <br />O link expira em <strong>1 hora</strong>.
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.6 }}>
-                💡 Não encontrou? Verifique a pasta de spam ou lixo eletrônico.
-              </div>
+        )}
+
+        {/* Step: Token */}
+        {step === 'token' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="input-group">
+              <label className="input-label">Código de 6 dígitos</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="000000"
+                value={token}
+                onChange={e => setToken(e.target.value.replace(/\D/g, ''))}
+                onKeyDown={e => e.key === 'Enter' && handleVerifyToken()}
+                style={{
+                  width: '100%', letterSpacing: 10, fontSize: 22, textAlign: 'center',
+                  padding: '10px 14px', borderRadius: 8,
+                  background: 'var(--bg3)', border: '1px solid var(--border)',
+                  color: 'var(--text1)',
+                }}
+                autoFocus
+              />
             </div>
-
-            <button
-              className="btn btn-ghost"
-              style={{ width: '100%', justifyContent: 'center', fontSize: 13 }}
-              onClick={() => { setSent(false); setEmail(''); }}
-            >
-              ← Tentar com outro e-mail
+            {error && <div style={{ background: '#ef444420', border: '1px solid #ef4444', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: '#f87171' }}>{error}</div>}
+            <button className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }}
+              onClick={handleVerifyToken} disabled={loading}>
+              {loading ? '⏳ Verificando...' : 'Verificar código →'}
             </button>
+            <button className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center', fontSize: 12 }}
+              onClick={() => { setStep('phone'); setToken(''); setError(null); }}>
+              ← Trocar telefone
+            </button>
+          </div>
+        )}
 
-            <button
-              className="btn btn-primary"
-              style={{ width: '100%', justifyContent: 'center' }}
-              onClick={onClose}
-            >
-              Fechar
+        {/* Step: New Password */}
+        {step === 'password' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="input-group">
+              <label className="input-label">Nova senha</label>
+              <input type="password" placeholder="Mínimo 6 caracteres"
+                value={newPwd} onChange={e => setNewPwd(e.target.value)} style={{ width: '100%' }} autoFocus />
+            </div>
+            <div className="input-group">
+              <label className="input-label">Confirmar senha</label>
+              <input type="password" placeholder="Repita a nova senha"
+                value={confirm} onChange={e => setConfirm(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleReset()}
+                style={{ width: '100%' }} />
+            </div>
+            {error && <div style={{ background: '#ef444420', border: '1px solid #ef4444', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: '#f87171' }}>{error}</div>}
+            <button className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }}
+              onClick={handleReset} disabled={loading}>
+              {loading ? '⏳ Salvando...' : '🔐 Redefinir senha'}
+            </button>
+          </div>
+        )}
+
+        {/* Step: Done */}
+        {step === 'done' && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 52, marginBottom: 16 }}>🎉</div>
+            <p style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 24, lineHeight: 1.6 }}>
+              Sua senha foi redefinida com sucesso.<br />Faça login com a nova senha.
+            </p>
+            <button className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }} onClick={onClose}>
+              Ir para o login
             </button>
           </div>
         )}
