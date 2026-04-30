@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { tasksApi, sprintsApi, epicsApi, usersApi, columnsApi } from '../../api';
+import { Avatar } from '../Shared/Avatar';
 import type { Task, TaskType, TaskPriority } from '../../types';
 
 interface Props {
@@ -169,9 +170,7 @@ export function TaskFormModal({ projectId, task, defaultColumnId, onClose, onSav
                       background: assigneeIds.includes(u.id) ? 'rgba(99,102,241,.15)' : 'var(--bg3)',
                       border: assigneeIds.includes(u.id) ? '1px solid var(--accent)' : '1px solid transparent',
                       cursor: 'pointer', fontSize: 12 }}>
-                    <div style={{ width: 18, height: 18, borderRadius: '50%', background: u.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                      {u.name[0].toUpperCase()}
-                    </div>
+                    <Avatar name={u.name} color={u.color} avatarUrl={u.avatarUrl} size="sm" />
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</span>
                     {assigneeIds.includes(u.id) && <span style={{ color: 'var(--accent)', fontSize: 14 }}>✓</span>}
                   </div>

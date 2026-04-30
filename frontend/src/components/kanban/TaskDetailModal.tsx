@@ -247,7 +247,7 @@ export function TaskDetailModal({ task, projectId, onClose }: Props) {
               <div className="section-title">Comentários ({comments.length})</div>
               {comments.map((c: any) => (
                 <div key={c.id} style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                  <Avatar name={c.author?.name ?? '?'} color={c.author?.color ?? '#6366f1'} />
+                  <Avatar name={c.author?.name ?? '?'} color={c.author?.color ?? '#6366f1'} avatarUrl={c.author?.avatarUrl} />
                   <div style={{ flex: 1, background: 'var(--bg3)', borderRadius: 8, padding: '10px 12px' }}>
                     <div style={{ fontWeight: 600, fontSize: 12, color: c.author?.color, marginBottom: 4 }}>{c.author?.name}</div>
                     <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.5 }}>{c.content}</div>
@@ -283,7 +283,7 @@ export function TaskDetailModal({ task, projectId, onClose }: Props) {
             <div style={{ marginTop: 12, borderBottom: '1px solid rgba(45,55,72,.3)', paddingBottom: 12 }}>
               <div style={{ color: 'var(--text3)', fontSize: 13, marginBottom: 8 }}>Responsáveis</div>
               <div className="avatar-stack">
-                {(displayTask.assignees ?? []).map((a: any) => <Avatar key={a.user?.id ?? a.userId} name={a.user?.name ?? '?'} color={a.user?.color ?? '#6366f1'} />)}
+                {(displayTask.assignees ?? []).map((a: any) => <Avatar key={a.user?.id ?? a.userId} name={a.user?.name ?? '?'} color={a.user?.color ?? '#6366f1'} avatarUrl={a.user?.avatarUrl} />)}
               </div>
             </div>
 
