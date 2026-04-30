@@ -6,7 +6,6 @@ import { projectsApi } from '../../api';
 import { Avatar } from '../Shared/Avatar';
 import { GlobalSearch } from '../Shared/GlobalSearch';
 import { ProfileModal } from '../Shared/ProfileModal';
-import { NotificationBell } from '../Shared/NotificationBell';
 import type { Project } from '../../types';
 
 const NAV = [
@@ -253,7 +252,6 @@ export function Sidebar() {
                       <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
                       <div style={{ fontSize: 10, color: 'var(--text3)' }}>{user.role}</div>
                     </div>
-                    <NotificationBell />
                     <span style={{ fontSize: 10, color: 'var(--text3)' }}>▲</span>
                   </>
                 )}

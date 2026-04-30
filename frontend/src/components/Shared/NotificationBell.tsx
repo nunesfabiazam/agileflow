@@ -89,11 +89,11 @@ export function NotificationBell() {
 
       {open && (
         <div style={{
-          position: 'absolute', bottom: '100%', left: 0,
+          position: 'absolute', top: '100%', right: 0,
           width: 340, maxHeight: 480, overflow: 'auto',
           background: 'var(--bg2)', border: '1px solid var(--border)',
-          borderRadius: 12, boxShadow: '0 -8px 32px rgba(0,0,0,.4)',
-          zIndex: 500, marginBottom: 8,
+          borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,.3)',
+          zIndex: 500, marginTop: 8,
         }}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',

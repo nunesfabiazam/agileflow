@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import { useEffect } from 'react';
 import { useAppStore } from './store/useAppStore';
 import { Sidebar } from './components/Layout/Sidebar';
+import { NotificationBell } from './components/Shared/NotificationBell';
 import { LoginPage }           from './pages/LoginPage';
 import { KanbanPage }          from './pages/KanbanPage';
 import { BacklogPage }         from './pages/BacklogPage';
@@ -25,11 +26,26 @@ function AuthGuard() {
   return token ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
+function TopBar() {
+  return (
+    <div style={{
+      height: 48, flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+      padding: '0 20px', gap: 8,
+      borderBottom: '1px solid var(--border)',
+      background: 'var(--bg2)',
+    }}>
+      <NotificationBell />
+    </div>
+  );
+}
+
 function AppLayout() {
   return (
     <div style={{ display:'flex', height:'100vh', overflow:'hidden' }}>
       <Sidebar />
       <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+        <TopBar />
         <main style={{ flex:1, overflow:'auto', padding:24 }}><Outlet /></main>
       </div>
     </div>
