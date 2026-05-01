@@ -144,6 +144,7 @@ export interface Document {
   updatedAt: string;
   space?: Pick<DocSpace, 'id' | 'name'>;
   spaceId?: string;
+  project?: Pick<Project, 'id' | 'name' | 'color' | 'key'>;
   author: Pick<User, 'id' | 'name' | 'color'>;
   linkedTasks?: Array<{ task: Pick<Task, 'id' | 'taskKey' | 'title'> }>;
 }

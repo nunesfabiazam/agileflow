@@ -15,7 +15,7 @@ const DOC_LABEL: Record<string, string> = {
   TEMPLATE: 'Template', TEST_PLAN: 'Plano de Testes', WIREFRAME: 'Wireframe', RUNBOOK: 'Runbook', OTHER: 'Outro',
 };
 const DOC_TYPES = Object.keys(DOC_LABEL) as DocType[];
-const SPACE_ICONS = ['📁', '🚀', '💡', '🛠️', '🧪', '📊', '🎨', '🔒', '📋', '🌐', '⚡', '🎯'];
+const SPACE_ICONS = ['📁', '🚀', '💡', '🛠️', '🧪', '📊', '🎨', '🔒', '📋', '🌐', '⚡', '🎯', '📌', '🗂️', '🏔️', '💎', '🔥', '⭐'];
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -47,28 +47,33 @@ export function DocsPage() {
   const [importMsg, setImportMsg]         = useState('');
   const importFileRef                     = useRef<HTMLInputElement>(null);
 
+  // Space inline editing
+  const [editingSpaceId,   setEditingSpaceId]   = useState<string | null>(null);
+  const [editingSpaceName, setEditingSpaceName] = useState('');
+  const [editingSpaceIcon, setEditingSpaceIcon] = useState('📁');
+  const [showIconPicker,   setShowIconPicker]   = useState(false);
+
+  // ── Queries (global — no projectId filter) ────────────────────────────────
   const { data: spaces = [] } = useQuery<DocSpace[]>({
-    queryKey: ['spaces', activeProjectId],
-    queryFn:  () => documentsApi.listSpaces(activeProjectId!).then(r => r.data.data ?? []),
-    enabled:  !!activeProjectId,
+    queryKey: ['spaces'],
+    queryFn:  () => documentsApi.listSpaces().then(r => r.data.data ?? []),
   });
 
   const { data: docs = [] } = useQuery<Document[]>({
-    queryKey: ['docs', activeProjectId, activeSpaceId],
+    queryKey: ['docs', activeSpaceId],
     queryFn:  () => documentsApi.list({
-      projectId: activeProjectId!,
       ...(activeSpaceId !== 'all' ? { spaceId: activeSpaceId } : {}),
     }).then(r => r.data.data ?? []),
-    enabled: !!activeProjectId,
   });
 
+  // ── Mutations ─────────────────────────────────────────────────────────────
   const createDocMut = useMutation({
     mutationFn: () => documentsApi.create({
       title: newDoc.title.trim(), type: newDoc.type, content: '', projectId: activeProjectId!,
       ...(activeSpaceId !== 'all' ? { spaceId: activeSpaceId } : {}),
     }),
     onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ['docs', activeProjectId] });
+      qc.invalidateQueries({ queryKey: ['docs'] });
       setShowCreate(false); setNewDoc({ title: '', type: 'SPEC' });
       const created = res.data.data;
       if (created?.id) navigate(`/documents/${created.id}`);
@@ -78,20 +83,39 @@ export function DocsPage() {
   const createSpaceMut = useMutation({
     mutationFn: () => documentsApi.createSpace({ name: newSpace.name.trim(), icon: newSpace.icon, projectId: activeProjectId! }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['spaces', activeProjectId] });
+      qc.invalidateQueries({ queryKey: ['spaces'] });
       setShowNewSpace(false); setNewSpace({ name: '', icon: '📁' });
+    },
+  });
+
+  const updateSpaceMut = useMutation({
+    mutationFn: (vars: { id: string; name: string; icon: string }) =>
+      documentsApi.updateSpace(vars.id, { name: vars.name, icon: vars.icon }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['spaces'] });
+      setEditingSpaceId(null);
+      setShowIconPicker(false);
+    },
+  });
+
+  const removeSpaceMut = useMutation({
+    mutationFn: (id: string) => documentsApi.removeSpace(id),
+    onSuccess: (_data, deletedId) => {
+      qc.invalidateQueries({ queryKey: ['spaces'] });
+      qc.invalidateQueries({ queryKey: ['docs'] });
+      if (activeSpaceId === deletedId) setActiveSpaceId('all');
     },
   });
 
   const removeMut = useMutation({
     mutationFn: (id: string) => documentsApi.remove(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['docs', activeProjectId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['docs'] }),
   });
 
   const cloneMut = useMutation({
     mutationFn: (id: string) => documentsApi.clone(id),
     onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ['docs', activeProjectId] });
+      qc.invalidateQueries({ queryKey: ['docs'] });
       if (res.data.data?.id) navigate(`/documents/${res.data.data.id}`);
     },
   });
@@ -103,7 +127,7 @@ export function DocsPage() {
     try {
       const spaceId = activeSpaceId !== 'all' ? activeSpaceId : undefined;
       const res = await importApi.document(file, activeProjectId, spaceId);
-      qc.invalidateQueries({ queryKey: ['docs', activeProjectId] });
+      qc.invalidateQueries({ queryKey: ['docs'] });
       setImportState('done');
       const docId = (res.data as any).data?.id;
       setImportMsg(`✅ "${file.name}" importado com sucesso!`);
@@ -114,55 +138,144 @@ export function DocsPage() {
     }
   };
 
-  if (!activeProjectId) return (
-    <div className="empty-state">
-      <div className="empty-icon">📄</div>
-      <div className="empty-text">Selecione um projeto para acessar a documentação.</div>
-    </div>
-  );
+  const startEditSpace = (sp: DocSpace, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingSpaceId(sp.id);
+    setEditingSpaceName(sp.name);
+    setEditingSpaceIcon(sp.icon ?? '📁');
+    setShowIconPicker(false);
+  };
+
+  const saveEditSpace = () => {
+    if (!editingSpaceId || !editingSpaceName.trim()) return;
+    updateSpaceMut.mutate({ id: editingSpaceId, name: editingSpaceName.trim(), icon: editingSpaceIcon });
+  };
 
   const allDocs = docs as Document[];
   const filtered = allDocs
     .filter(d => !search || d.title.toLowerCase().includes(search.toLowerCase()))
     .filter(d => !filterType || d.type === filterType);
 
-  const recent  = [...allDocs].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 5);
-  const activeSpace = (spaces as DocSpace[]).find(s => s.id === activeSpaceId);
+  const recent       = [...allDocs].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 5);
+  const activeSpace  = (spaces as DocSpace[]).find(s => s.id === activeSpaceId);
+  const canCreate    = !!activeProjectId; // still need a project to create
 
   return (
     <div style={{ display: 'flex', gap: 0, height: 'calc(100vh - 96px)', margin: -24 }}>
 
       {/* ── Spaces sidebar ──────────────────────────────────────────────── */}
-      <div style={{ width: 230, flexShrink: 0, borderRight: '1px solid var(--border)', background: 'var(--bg2)', display: 'flex', flexDirection: 'column', padding: '16px 10px', overflow: 'auto' }}>
+      <div style={{ width: 240, flexShrink: 0, borderRight: '1px solid var(--border)', background: 'var(--bg2)', display: 'flex', flexDirection: 'column', padding: '16px 10px', overflow: 'auto' }}>
 
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text3)', marginBottom: 8, padding: '0 6px' }}>Espaços</div>
 
+        {/* All docs */}
         <div
           className={`nav-item ${activeSpaceId === 'all' ? 'active' : ''}`}
           onClick={() => setActiveSpaceId('all')}
         >
-          <span>📁</span><span style={{ flex: 1 }}>Todos os Docs</span>
+          <span>📄</span><span style={{ flex: 1 }}>Todos os Documentos</span>
           <span style={{ fontSize: 11, color: 'var(--text3)' }}>{allDocs.length}</span>
         </div>
 
+        {/* Space list with inline edit */}
         {(spaces as DocSpace[]).map(sp => (
-          <div
-            key={sp.id}
-            className={`nav-item ${activeSpaceId === sp.id ? 'active' : ''}`}
-            onClick={() => setActiveSpaceId(sp.id)}
-          >
-            <span>{sp.icon ?? '📁'}</span>
-            <span style={{ flex: 1 }}>{sp.name}</span>
-            <span style={{ fontSize: 11, color: 'var(--text3)' }}>{sp._count?.documents ?? 0}</span>
+          <div key={sp.id} style={{ position: 'relative' }}>
+            {editingSpaceId === sp.id ? (
+              /* ── Inline edit mode ── */
+              <div style={{ padding: '6px 8px', background: 'var(--bg3)', borderRadius: 8, border: '1px solid var(--accent)', marginBottom: 2 }}>
+                {/* Icon picker toggle */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <button
+                    onClick={() => setShowIconPicker(v => !v)}
+                    style={{ fontSize: 18, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '2px 6px', cursor: 'pointer', lineHeight: 1 }}
+                  >{editingSpaceIcon}</button>
+                  <input
+                    autoFocus
+                    value={editingSpaceName}
+                    onChange={e => setEditingSpaceName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveEditSpace(); if (e.key === 'Escape') setEditingSpaceId(null); }}
+                    style={{ flex: 1, fontSize: 13, padding: '3px 6px' }}
+                  />
+                </div>
+                {/* Icon grid */}
+                {showIconPicker && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 6 }}>
+                    {SPACE_ICONS.map(ic => (
+                      <div key={ic}
+                        onClick={() => { setEditingSpaceIcon(ic); setShowIconPicker(false); }}
+                        style={{
+                          width: 28, height: 28, fontSize: 16, borderRadius: 5, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: editingSpaceIcon === ic ? 'var(--accent)' : 'var(--bg4)',
+                        }}
+                      >{ic}</div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => setEditingSpaceId(null)}
+                    style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'none', border: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text3)' }}
+                  >Cancelar</button>
+                  <button
+                    onClick={saveEditSpace}
+                    disabled={!editingSpaceName.trim() || updateSpaceMut.isPending}
+                    style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontWeight: 600 }}
+                  >Salvar</button>
+                </div>
+              </div>
+            ) : (
+              /* ── Normal mode ── */
+              <div
+                className={`nav-item ${activeSpaceId === sp.id ? 'active' : ''}`}
+                onClick={() => setActiveSpaceId(sp.id)}
+                style={{ paddingRight: 4 }}
+              >
+                <span>{sp.icon ?? '📁'}</span>
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sp.name}</span>
+                <span style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>{sp._count?.documents ?? 0}</span>
+                {/* Edit + delete buttons (show on hover) */}
+                <div
+                  className="space-actions"
+                  style={{ display: 'flex', gap: 2, marginLeft: 2, opacity: 0, transition: 'opacity .15s' }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = '0')}
+                >
+                  <button
+                    onClick={e => startEditSpace(sp, e)}
+                    title="Editar espaço"
+                    style={{ fontSize: 11, padding: '1px 4px', borderRadius: 4, background: 'var(--bg4)', border: 'none', cursor: 'pointer', color: 'var(--text3)', lineHeight: 1.4 }}
+                  >✏️</button>
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (confirm(`Remover espaço "${sp.name}"? Os documentos dentro serão desvinculados do espaço, não excluídos.`))
+                        removeSpaceMut.mutate(sp.id);
+                    }}
+                    title="Remover espaço"
+                    style={{ fontSize: 11, padding: '1px 4px', borderRadius: 4, background: 'var(--bg4)', border: 'none', cursor: 'pointer', color: 'var(--text3)', lineHeight: 1.4 }}
+                  >✕</button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
 
+        {/* Hover reveal for space actions via CSS */}
+        <style>{`.nav-item:hover .space-actions { opacity: 1 !important; }`}</style>
+
         <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-          <button
-            className="btn btn-ghost btn-sm"
-            style={{ width: '100%', fontSize: 12, justifyContent: 'center' }}
-            onClick={() => setShowNewSpace(true)}
-          >+ Novo Espaço</button>
+          {canCreate ? (
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ width: '100%', fontSize: 12, justifyContent: 'center' }}
+              onClick={() => setShowNewSpace(true)}
+            >+ Novo Espaço</button>
+          ) : (
+            <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center', padding: '4px 0' }}>
+              Selecione um projeto para criar espaços
+            </div>
+          )}
         </div>
       </div>
 
@@ -175,17 +288,15 @@ export function DocsPage() {
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
               {activeSpaceId === 'all' ? '📄 Documentação' : `${activeSpace?.icon ?? '📁'} ${activeSpace?.name}`}
             </h2>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{filtered.length} documento{filtered.length !== 1 ? 's' : ''}</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{filtered.length} documento{filtered.length !== 1 ? 's' : ''} · todos os projetos</div>
           </div>
 
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* Search */}
             <input
               placeholder="🔍 Buscar..."
               value={search} onChange={e => setSearch(e.target.value)}
               style={{ width: 190, fontSize: 13 }}
             />
-            {/* Type filter */}
             <select
               value={filterType} onChange={e => setFilterType(e.target.value)}
               style={{ fontSize: 12, padding: '5px 8px', background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text2)' }}
@@ -193,19 +304,38 @@ export function DocsPage() {
               <option value="">Todos os tipos</option>
               {DOC_TYPES.map(k => <option key={k} value={k}>{DOC_ICON[k]} {DOC_LABEL[k]}</option>)}
             </select>
-            {/* View toggle */}
             <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
               <button onClick={() => setViewMode('list')} style={{ padding: '5px 10px', fontSize: 13, border: 'none', cursor: 'pointer', background: viewMode === 'list' ? 'var(--accent)' : 'var(--bg3)', color: viewMode === 'list' ? '#fff' : 'var(--text2)' }} title="Lista">☰</button>
               <button onClick={() => setViewMode('grid')} style={{ padding: '5px 10px', fontSize: 13, border: 'none', cursor: 'pointer', background: viewMode === 'grid' ? 'var(--accent)' : 'var(--bg3)', color: viewMode === 'grid' ? '#fff' : 'var(--text2)' }} title="Grade">⊞</button>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => { setShowImport(true); setImportState('idle'); setImportMsg(''); }} style={{ border: '1px solid var(--border)' }}>⬆ Importar</button>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>+ Novo Documento</button>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => { if (!canCreate) { alert('Selecione um projeto para importar documentos.'); return; } setShowImport(true); setImportState('idle'); setImportMsg(''); }}
+              style={{ border: '1px solid var(--border)', opacity: canCreate ? 1 : 0.5 }}
+              title={canCreate ? 'Importar documento' : 'Selecione um projeto primeiro'}
+            >⬆ Importar</button>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => { if (!canCreate) { alert('Selecione um projeto para criar documentos.'); return; } setShowCreate(true); }}
+              title={canCreate ? 'Novo documento' : 'Selecione um projeto primeiro'}
+              style={{ opacity: canCreate ? 1 : 0.6 }}
+            >+ Novo Documento</button>
           </div>
         </div>
 
+        {/* No project banner (soft, non-blocking) */}
+        {!canCreate && (
+          <div style={{
+            background: 'rgba(99,102,241,.06)', borderBottom: '1px solid rgba(99,102,241,.15)',
+            padding: '8px 24px', fontSize: 12, color: 'var(--text3)',
+          }}>
+            💡 Você está vendo documentos de <strong>todos os projetos</strong>. Selecione um projeto no menu para criar ou importar novos documentos.
+          </div>
+        )}
+
         <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
 
-          {/* Recently updated (only when showing "all" and no search) */}
+          {/* Recently updated */}
           {activeSpaceId === 'all' && !search && !filterType && recent.length > 0 && (
             <div style={{ marginBottom: 28 }}>
               <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--text3)', marginBottom: 10 }}>⏱ Atualizados recentemente</div>
@@ -217,7 +347,7 @@ export function DocsPage() {
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
                       background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8,
-                      cursor: 'pointer', transition: 'all .15s', maxWidth: 260,
+                      cursor: 'pointer', transition: 'all .15s', maxWidth: 280,
                     }}
                     onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--accent)'; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; }}
@@ -225,7 +355,14 @@ export function DocsPage() {
                     <span style={{ fontSize: 18 }}>{DOC_ICON[doc.type] ?? '📄'}</span>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.title}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>{timeAgo(doc.updatedAt)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <span>{timeAgo(doc.updatedAt)}</span>
+                        {doc.project && (
+                          <span style={{ background: doc.project.color + '22', color: doc.project.color, padding: '1px 5px', borderRadius: 4, fontWeight: 600 }}>
+                            {doc.project.key}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -238,19 +375,21 @@ export function DocsPage() {
             <div className="empty-state">
               <div className="empty-icon">📝</div>
               <div className="empty-text">{search ? `Nenhum resultado para "${search}".` : 'Nenhum documento ainda.'}</div>
-              {!search && !filterType && <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setShowCreate(true)}>Criar Primeiro Documento</button>}
+              {!search && !filterType && canCreate && (
+                <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setShowCreate(true)}>Criar Primeiro Documento</button>
+              )}
             </div>
           ) : viewMode === 'list' ? (
             /* ── List view ── */
             <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 110px 80px 40px', gap: 0, padding: '8px 16px', background: 'var(--bg3)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text3)', letterSpacing: '.06em' }}>
-                <div>Título</div><div>Autor</div><div>Espaço</div><div>Modificado</div><div></div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 90px 80px 44px', gap: 0, padding: '8px 16px', background: 'var(--bg3)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text3)', letterSpacing: '.06em' }}>
+                <div>Título</div><div>Autor</div><div>Espaço</div><div>Projeto</div><div>Modificado</div><div></div>
               </div>
               {filtered.map((doc, idx) => (
                 <div
                   key={doc.id}
                   style={{
-                    display: 'grid', gridTemplateColumns: '1fr 120px 110px 80px 40px',
+                    display: 'grid', gridTemplateColumns: '1fr 110px 110px 90px 80px 44px',
                     gap: 0, padding: '10px 16px', cursor: 'pointer',
                     borderTop: idx > 0 ? '1px solid var(--border)' : 'none',
                     background: 'transparent', transition: 'background .1s', alignItems: 'center',
@@ -273,7 +412,18 @@ export function DocsPage() {
                   </div>
                   {/* Space */}
                   <div>
-                    {doc.space && <span style={{ fontSize: 11, color: 'var(--accent2)', background: 'rgba(99,102,241,.1)', padding: '2px 8px', borderRadius: 10 }}>{doc.space.name}</span>}
+                    {doc.space && <span style={{ fontSize: 11, color: 'var(--accent2)', background: 'rgba(99,102,241,.1)', padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>{doc.space.name}</span>}
+                  </div>
+                  {/* Project badge */}
+                  <div>
+                    {doc.project && (
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 8,
+                        background: (doc.project.color ?? '#6366f1') + '22',
+                        color: doc.project.color ?? '#6366f1',
+                        whiteSpace: 'nowrap',
+                      }}>{doc.project.key}</span>
+                    )}
                   </div>
                   {/* Modified */}
                   <div style={{ fontSize: 11, color: 'var(--text3)' }}>{timeAgo(doc.updatedAt)}</div>
@@ -331,6 +481,13 @@ export function DocsPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
                     <Avatar name={doc.author?.name ?? '?'} color={doc.author?.color ?? '#6366f1'} size="sm" />
                     <span style={{ fontSize: 12, color: 'var(--text3)', flex: 1 }}>{doc.author?.name}</span>
+                    {doc.project && (
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 8,
+                        background: (doc.project.color ?? '#6366f1') + '22',
+                        color: doc.project.color ?? '#6366f1',
+                      }}>{doc.project.key}</span>
+                    )}
                     {doc.space && <span style={{ fontSize: 11, color: 'var(--accent2)', background: 'rgba(99,102,241,.1)', padding: '1px 8px', borderRadius: 10 }}>{doc.space.name}</span>}
                   </div>
                 </div>
@@ -346,10 +503,9 @@ export function DocsPage() {
           <div className="modal" style={{ width: 520, padding: 28 }}>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>⬆ Importar Documento</div>
             <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 24 }}>
-              Importe um arquivo para criar um novo documento automaticamente no projeto.
+              Importe um arquivo para criar um novo documento no projeto <strong>{activeProjectId}</strong>.
             </div>
 
-            {/* Format options */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
               {[
                 { ext: '.md',   icon: '📝', label: 'Markdown',     desc: 'Arquivos .md com texto e código' },
@@ -379,7 +535,6 @@ export function DocsPage() {
               ))}
             </div>
 
-            {/* Drag & drop area */}
             <div
               onDragOver={e => { e.preventDefault(); (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--accent)'; }}
               onDragLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; }}
@@ -393,8 +548,7 @@ export function DocsPage() {
               style={{
                 border: '2px dashed var(--border)', borderRadius: 10, padding: '20px 0',
                 textAlign: 'center', cursor: importState === 'loading' ? 'wait' : 'pointer',
-                marginBottom: 16, transition: 'border-color .15s',
-                background: 'var(--bg1)',
+                marginBottom: 16, transition: 'border-color .15s', background: 'var(--bg1)',
               }}
             >
               {importState === 'loading' ? (
@@ -408,7 +562,6 @@ export function DocsPage() {
               )}
             </div>
 
-            {/* Hidden file input */}
             <input
               ref={importFileRef}
               type="file"
@@ -417,7 +570,6 @@ export function DocsPage() {
               onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = ''; }}
             />
 
-            {/* Status message */}
             {importMsg && (
               <div style={{
                 padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 13, fontWeight: 600,

@@ -69,8 +69,10 @@ export const epicsApi = {
 
 // ─── Documents ────────────────────────────────────────────────────────────────
 export const documentsApi = {
-  listSpaces:   (projectId: string) => api.get(`/documents/spaces?projectId=${projectId}`),
+  listSpaces:   (projectId?: string) => api.get(`/documents/spaces${projectId ? `?projectId=${projectId}` : ''}`),
   createSpace:  (data: { name: string; icon?: string; projectId: string }) => api.post('/documents/spaces', data),
+  updateSpace:  (id: string, data: { name?: string; icon?: string }) => api.patch(`/documents/spaces/${id}`, data),
+  removeSpace:  (id: string) => api.delete(`/documents/spaces/${id}`),
   list:         (params: Record<string, string>) => api.get<ApiResponse<Document[]>>('/documents', { params }),
   get:          (id: string) => api.get<ApiResponse<Document>>(`/documents/${id}`),
   create:       (data: Partial<Document> & { projectId: string; taskIds?: string[] }) => api.post<ApiResponse<Document>>('/documents', data),

@@ -24,10 +24,11 @@ const SpaceSchema = z.object({
 });
 
 // ── Spaces ────────────────────────────────────────────────────────────────────
+// GET all spaces — projectId is optional (global view by default)
 router.get('/spaces', async (req: AuthRequest, res: Response) => {
-  const { projectId } = req.query as { projectId: string };
+  const { projectId } = req.query as { projectId?: string };
   const spaces = await prisma.docSpace.findMany({
-    where: { projectId },
+    where: { ...(projectId ? { projectId } : {}) },
     orderBy: { order: 'asc' },
     include: { _count: { select: { documents: true } } },
   });
@@ -46,7 +47,36 @@ router.post('/spaces', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// PATCH /spaces/:id — rename or change icon
+router.patch('/spaces/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, icon } = req.body as { name?: string; icon?: string };
+    const space = await prisma.docSpace.update({
+      where: { id: req.params.id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(icon !== undefined && { icon }),
+      },
+      include: { _count: { select: { documents: true } } },
+    });
+    res.json({ success: true, data: space });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message ?? 'Erro ao atualizar espaço.' });
+  }
+});
+
+// DELETE /spaces/:id
+router.delete('/spaces/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    await prisma.docSpace.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message ?? 'Erro ao remover espaço.' });
+  }
+});
+
 // ── Documents ─────────────────────────────────────────────────────────────────
+// GET all docs — projectId is optional (global view by default)
 router.get('/', async (req: AuthRequest, res: Response) => {
   const { projectId, spaceId, search } = req.query as Record<string, string>;
   const docs = await prisma.document.findMany({
@@ -57,8 +87,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     },
     orderBy: { updatedAt: 'desc' },
     include: {
-      author: { select: { id: true, name: true, color: true } },
-      space:  { select: { id: true, name: true } },
+      author:  { select: { id: true, name: true, color: true } },
+      space:   { select: { id: true, name: true } },
+      project: { select: { id: true, name: true, color: true, key: true } },
       linkedTasks: { include: { task: { select: { id: true, taskKey: true, title: true } } } },
     },
   });
