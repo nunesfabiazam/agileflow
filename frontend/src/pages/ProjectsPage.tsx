@@ -31,6 +31,11 @@ export function ProjectsPage() {
     onError: (e: any) => setError(e?.response?.data?.error ?? 'Erro ao criar projeto.'),
   });
 
+  const cloneMut = useMutation({
+    mutationFn: (id: string) => projectsApi.clone(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['projects'] }); },
+  });
+
   const handleSelect = (p: Project) => { setActiveProject(p.id); addRecentProject(p); navigate('/kanban'); };
 
   if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 60 }}><div className="spinner" /></div>;
@@ -47,22 +52,30 @@ export function ProjectsPage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
           {(projects as Project[]).map(p => (
-            <div key={p.id} className="card" style={{ cursor: 'pointer', borderLeft: `4px solid ${p.color}`, transition: 'all .15s' }}
-              onClick={() => handleSelect(p)}
+            <div key={p.id} className="card" style={{ borderLeft: `4px solid ${p.color}`, transition: 'all .15s', position: 'relative' }}
               onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = ''; }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <span style={{ fontSize: 24 }}>{p.iconEmoji}</span>
-                <div>
+                <span style={{ fontSize: 24, cursor: 'pointer' }} onClick={() => handleSelect(p)}>{p.iconEmoji}</span>
+                <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => handleSelect(p)}>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{p.name}</div>
                   <code style={{ fontSize: 11, color: 'var(--text3)' }}>{p.key}</code>
                 </div>
+                {/* Clone button */}
+                <button
+                  title="Clonar projeto"
+                  onClick={e => { e.stopPropagation(); cloneMut.mutate(p.id); }}
+                  disabled={cloneMut.isPending}
+                  style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg3)', cursor: 'pointer', fontSize: 12, color: 'var(--text2)', flexShrink: 0 }}
+                >🔀 Clonar</button>
               </div>
-              {p.description && <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>{p.description}</div>}
-              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text3)' }}>
-                <span>📋 {p._count?.tasks ?? 0} tasks</span>
-                <span>👥 {p._count?.members ?? 0} membros</span>
-                <span>🏃 {p._count?.sprints ?? 0} sprints</span>
+              <div onClick={() => handleSelect(p)} style={{ cursor: 'pointer' }}>
+                {p.description && <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>{p.description}</div>}
+                <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text3)' }}>
+                  <span>📋 {p._count?.tasks ?? 0} tasks</span>
+                  <span>👥 {p._count?.members ?? 0} membros</span>
+                  <span>🏃 {p._count?.sprints ?? 0} sprints</span>
+                </div>
               </div>
             </div>
           ))}

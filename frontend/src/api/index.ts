@@ -16,6 +16,7 @@ export const projectsApi = {
   get:           (id: string) => api.get<ApiResponse<Project>>(`/projects/${id}`),
   create:        (data: Partial<Project>) => api.post<ApiResponse<Project>>('/projects', data),
   update:        (id: string, data: Partial<Project>) => api.patch<ApiResponse<Project>>(`/projects/${id}`, data),
+  clone:         (id: string) => api.post<ApiResponse<Project>>(`/projects/${id}/clone`),
   addMember:     (id: string, userId: string, role: string) => api.post(`/projects/${id}/members`, { userId, role }),
   removeMember:  (id: string, userId: string) => api.delete(`/projects/${id}/members/${userId}`),
 };
@@ -35,6 +36,7 @@ export const tasksApi = {
   get:            (id: string) => api.get<ApiResponse<Task>>(`/tasks/${id}`),
   create:         (data: Partial<Task> & { projectId: string }) => api.post<ApiResponse<Task>>('/tasks', data),
   update:         (id: string, data: Partial<Task> & { assigneeIds?: string[]; criteria?: Array<{ text: string; isDone?: boolean }> }) => api.patch<ApiResponse<Task>>(`/tasks/${id}`, data),
+  clone:          (id: string, projectId?: string) => api.post<ApiResponse<Task>>(`/tasks/${id}/clone`, projectId ? { projectId } : {}),
   remove:         (id: string) => api.delete(`/tasks/${id}`),
   reorder:        (updates: Array<{ id: string; columnId: string; order: number }>) => api.post('/tasks/reorder', { updates }),
   bulkUpdate:     (ids: string[], data: { sprintId?: string | null; priority?: string; epicId?: string | null }) => api.patch('/tasks/bulk', { ids, data }),
@@ -51,6 +53,7 @@ export const sprintsApi = {
   list:     (projectId: string) => api.get<ApiResponse<Sprint[]>>(`/sprints?projectId=${projectId}`),
   create:   (data: Partial<Sprint> & { projectId: string }) => api.post<ApiResponse<Sprint>>('/sprints', data),
   update:   (id: string, data: Partial<Sprint>) => api.patch<ApiResponse<Sprint>>(`/sprints/${id}`, data),
+  clone:    (id: string) => api.post<ApiResponse<Sprint>>(`/sprints/${id}/clone`),
   start:    (id: string) => api.post(`/sprints/${id}/start`),
   complete: (id: string, moveToSprintId?: string) => api.post(`/sprints/${id}/complete`, { moveToSprintId }),
   remove:   (id: string) => api.delete(`/sprints/${id}`),
@@ -72,6 +75,7 @@ export const documentsApi = {
   get:          (id: string) => api.get<ApiResponse<Document>>(`/documents/${id}`),
   create:       (data: Partial<Document> & { projectId: string; taskIds?: string[] }) => api.post<ApiResponse<Document>>('/documents', data),
   update:       (id: string, data: Partial<Document> & { taskIds?: string[] }) => api.patch<ApiResponse<Document>>(`/documents/${id}`, data),
+  clone:        (id: string, projectId?: string) => api.post<ApiResponse<Document>>(`/documents/${id}/clone`, projectId ? { projectId } : {}),
   remove:       (id: string) => api.delete(`/documents/${id}`),
 };
 

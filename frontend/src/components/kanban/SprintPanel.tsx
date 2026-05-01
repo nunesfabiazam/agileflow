@@ -54,6 +54,11 @@ export function SprintPanel({ projectId }: Props) {
     },
   });
 
+  const cloneMut = useMutation({
+    mutationFn: (id: string) => sprintsApi.clone(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sprints', projectId] }),
+  });
+
   const activeSprint   = sprints.find(s => s.status === 'ACTIVE');
   const plannedSprints = sprints.filter(s => s.status === 'PLANNING');
   const doneSprints    = sprints.filter(s => s.status === 'COMPLETED').slice(0, 3);
@@ -149,6 +154,10 @@ export function SprintPanel({ projectId }: Props) {
                 <button className="btn btn-primary btn-sm" onClick={() => startMut.mutate(s.id)}
                   disabled={!!activeSprint || startMut.isPending}>
                   {startMut.isPending ? '...' : '▶ Iniciar'}
+                </button>
+                <button className="btn btn-ghost btn-sm" title="Clonar sprint"
+                  onClick={() => cloneMut.mutate(s.id)} disabled={cloneMut.isPending}>
+                  🔀
                 </button>
                 <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', opacity: .7 }}
                   onClick={() => { if (confirm(`Excluir "${s.name}"?`)) deleteMut.mutate(s.id); }}>

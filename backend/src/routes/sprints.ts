@@ -116,4 +116,24 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   res.json({ success: true });
 });
 
+// POST /api/sprints/:id/clone — duplicate sprint structure (no tasks, status = PLANNING)
+router.post('/:id/clone', async (req: AuthRequest, res: Response) => {
+  try {
+    const source = await prisma.sprint.findUnique({ where: { id: req.params.id } });
+    if (!source) { res.status(404).json({ success: false, error: 'Sprint não encontrada.' }); return; }
+
+    const cloned = await prisma.sprint.create({
+      data: {
+        name:      `${source.name} (Cópia)`,
+        goal:      source.goal ?? undefined,
+        projectId: source.projectId,
+        status:    'PLANNING',
+      },
+    });
+    res.status(201).json({ success: true, data: cloned });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message ?? 'Erro interno.' });
+  }
+});
+
 export default router;

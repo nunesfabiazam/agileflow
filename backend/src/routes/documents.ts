@@ -125,4 +125,28 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   res.json({ success: true });
 });
 
+// POST /api/documents/:id/clone — duplicate document (new draft copy)
+router.post('/:id/clone', async (req: AuthRequest, res: Response) => {
+  try {
+    const source = await prisma.document.findUnique({ where: { id: req.params.id } });
+    if (!source) { res.status(404).json({ success: false, error: 'Documento não encontrado.' }); return; }
+
+    const cloned = await prisma.document.create({
+      data: {
+        title:     `Cópia de ${source.title}`,
+        content:   source.content ?? undefined,
+        type:      source.type,
+        status:    'DRAFT',
+        projectId: req.body.projectId ?? source.projectId,
+        spaceId:   source.spaceId ?? undefined,
+        authorId:  req.user!.userId,
+      },
+      include: { author: { select: { id: true, name: true, color: true } }, space: true },
+    });
+    res.status(201).json({ success: true, data: cloned });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message ?? 'Erro interno.' });
+  }
+});
+
 export default router;

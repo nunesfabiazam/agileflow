@@ -84,6 +84,15 @@ export function DocsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['docs', activeProjectId] }),
   });
 
+  const cloneMut = useMutation({
+    mutationFn: (id: string) => documentsApi.clone(id),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['docs', activeProjectId] });
+      // Navigate to cloned doc for editing
+      if (res.data.data?.id) navigate(`/documents/${res.data.data.id}`);
+    },
+  });
+
   if (!activeProjectId) return (
     <div className="empty-state">
       <div className="empty-icon">📄</div>
@@ -246,8 +255,13 @@ export function DocsPage() {
                   </div>
                   {/* Modified */}
                   <div style={{ fontSize: 11, color: 'var(--text3)' }}>{timeAgo(doc.updatedAt)}</div>
-                  {/* Delete */}
-                  <div>
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); cloneMut.mutate(doc.id); }}
+                      title="Duplicar documento"
+                      style={{ color: 'var(--text3)', fontSize: 11, padding: '2px 7px', borderRadius: 4, background: 'var(--bg3)', border: '1px solid var(--border)', cursor: 'pointer', fontWeight: 600 }}
+                    >📋</button>
                     <button
                       onClick={e => { e.stopPropagation(); if (confirm(`Excluir "${doc.title}"?`)) removeMut.mutate(doc.id); }}
                       style={{ color: 'var(--text3)', fontSize: 13, padding: '2px 6px', borderRadius: 4, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5 }}
@@ -270,12 +284,21 @@ export function DocsPage() {
                   onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.transform = ''; }}
                 >
-                  <button
-                    onClick={e => { e.stopPropagation(); if (confirm(`Excluir "${doc.title}"?`)) removeMut.mutate(doc.id); }}
-                    style={{ position: 'absolute', top: 10, right: 10, color: 'var(--text3)', fontSize: 13, padding: '2px 6px', borderRadius: 4, background: 'var(--bg4)', opacity: 0, transition: 'opacity .15s', border: 'none', cursor: 'pointer' }}
-                    onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
-                    onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = '0'}
-                  >✕</button>
+                  <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4 }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); cloneMut.mutate(doc.id); }}
+                      title="Duplicar"
+                      style={{ color: 'var(--text3)', fontSize: 11, padding: '2px 7px', borderRadius: 4, background: 'var(--bg4)', opacity: 0, transition: 'opacity .15s', border: '1px solid var(--border)', cursor: 'pointer', fontWeight: 600 }}
+                      onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
+                      onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = '0'}
+                    >📋</button>
+                    <button
+                      onClick={e => { e.stopPropagation(); if (confirm(`Excluir "${doc.title}"?`)) removeMut.mutate(doc.id); }}
+                      style={{ color: 'var(--text3)', fontSize: 13, padding: '2px 6px', borderRadius: 4, background: 'var(--bg4)', opacity: 0, transition: 'opacity .15s', border: 'none', cursor: 'pointer' }}
+                      onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
+                      onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = '0'}
+                    >✕</button>
+                  </div>
                   <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
                     <span style={{ fontSize: 26 }}>{DOC_ICON[doc.type] ?? '📄'}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>

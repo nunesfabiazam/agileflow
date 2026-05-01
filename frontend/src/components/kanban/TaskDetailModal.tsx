@@ -90,6 +90,11 @@ export function TaskDetailModal({ task, projectId, onClose }: Props) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['task-detail', task.id] }); qc.invalidateQueries({ queryKey: ['tasks', projectId] }); },
   });
 
+  const cloneTaskMut = useMutation({
+    mutationFn: () => tasksApi.clone(task.id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks', projectId] }); onClose(); },
+  });
+
   const displayTask   = freshTask ?? task;
   const criteria      = displayTask.criteria ?? [];
   const comments      = (displayTask.comments ?? []) as any[];
@@ -142,6 +147,12 @@ export function TaskDetailModal({ task, projectId, onClose }: Props) {
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ fontWeight: 700, fontSize: 18, flex: 1, lineHeight: 1.3 }}>{displayTask.title}</div>
+            <button
+              onClick={() => cloneTaskMut.mutate()}
+              disabled={cloneTaskMut.isPending}
+              title="Duplicar task"
+              style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg3)', cursor: 'pointer', fontSize: 12, color: 'var(--text2)', fontWeight: 600, flexShrink: 0 }}
+            >📋 Duplicar</button>
             <button onClick={onClose} style={{ width: 32, height: 32, background: 'var(--bg3)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text3)', fontSize: 18, flexShrink: 0 }}>✕</button>
           </div>
         </div>

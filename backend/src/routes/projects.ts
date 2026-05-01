@@ -125,4 +125,47 @@ router.delete('/:id/members/:userId', async (req: AuthRequest, res: Response) =>
   res.json({ success: true });
 });
 
+// POST /api/projects/:id/clone — clone project structure (columns, spaces, optionally epics)
+router.post('/:id/clone', async (req: AuthRequest, res: Response) => {
+  try {
+    const source = await prisma.project.findUnique({
+      where: { id: req.params.id },
+      include: {
+        kanbanColumns: { orderBy: { order: 'asc' } },
+        spaces: { orderBy: { order: 'asc' } },
+        epics: true,
+      },
+    });
+    if (!source) { res.status(404).json({ success: false, error: 'Projeto não encontrado.' }); return; }
+
+    // Generate unique key (append C1, C2, ... until unique)
+    let newKey = source.key + 'C';
+    let suffix = 1;
+    while (await prisma.project.findUnique({ where: { key: newKey } })) {
+      newKey = source.key + 'C' + suffix++;
+    }
+
+    const cloned = await prisma.project.create({
+      data: {
+        name:        `${source.name} (Cópia)`,
+        description: source.description ?? undefined,
+        key:         newKey,
+        color:       source.color,
+        iconEmoji:   source.iconEmoji ?? undefined,
+        ownerId:     req.user!.userId,
+        kanbanColumns: { create: source.kanbanColumns.map(c => ({ name: c.name, color: c.color, order: c.order, isDefault: c.isDefault })) },
+        members:       { create: [{ userId: req.user!.userId, role: req.user!.role }] },
+        spaces:        { create: source.spaces.map(s => ({ name: s.name, icon: s.icon ?? undefined, order: s.order })) },
+      },
+      include: {
+        owner: { select: { id: true, name: true, color: true } },
+        _count: { select: { tasks: true, members: true, sprints: true } },
+      },
+    });
+    res.status(201).json({ success: true, data: cloned });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message ?? 'Erro interno.' });
+  }
+});
+
 export default router;

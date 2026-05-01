@@ -311,4 +311,52 @@ router.delete('/:id/dependencies/:depId', async (req: AuthRequest, res: Response
   }
 });
 
+// POST /api/tasks/:id/clone — duplicate a task (same or different project)
+router.post('/:id/clone', async (req: AuthRequest, res: Response) => {
+  try {
+    const source = await prisma.task.findUnique({
+      where: { id: req.params.id },
+      include: { criteria: { orderBy: { order: 'asc' } } },
+    });
+    if (!source) { res.status(404).json({ success: false, error: 'Task não encontrada.' }); return; }
+
+    const targetProjectId = req.body.projectId ?? source.projectId;
+    const project = await prisma.project.findUnique({ where: { id: targetProjectId } });
+    if (!project) { res.status(404).json({ success: false, error: 'Projeto destino não encontrado.' }); return; }
+
+    const count = await prisma.task.count({ where: { projectId: targetProjectId } });
+    const taskKey = `${project.key}-${count + 1}`;
+
+    // Find default column in target project if switching projects
+    let columnId = source.columnId;
+    if (targetProjectId !== source.projectId) {
+      const firstCol = await prisma.kanbanColumn.findFirst({ where: { projectId: targetProjectId }, orderBy: { order: 'asc' } });
+      columnId = firstCol?.id ?? null;
+    }
+
+    const cloned = await prisma.task.create({
+      data: {
+        taskKey,
+        title:       `${source.title} (Cópia)`,
+        description: source.description ?? undefined,
+        type:        source.type,
+        priority:    source.priority,
+        storyPoints: source.storyPoints ?? undefined,
+        columnId:    columnId ?? undefined,
+        projectId:   targetProjectId,
+        creatorId:   req.user!.userId,
+        // Keep sprint only if same project
+        sprintId:    targetProjectId === source.projectId ? (source.sprintId ?? undefined) : undefined,
+        criteria: source.criteria.length > 0 ? {
+          create: source.criteria.map((c, i) => ({ text: c.text, isDone: false, order: i })),
+        } : undefined,
+      },
+      select: taskSelect,
+    });
+    res.status(201).json({ success: true, data: cloned });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message ?? 'Erro interno.' });
+  }
+});
+
 export default router;
