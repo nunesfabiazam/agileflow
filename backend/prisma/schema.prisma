@@ -58,6 +58,11 @@ enum DocType {
   OTHER
 }
 
+enum DocStatus {
+  DRAFT
+  PUBLISHED
+}
+
 // ─── USER ─────────────────────────────────────────────────────────────────────
 
 model User {
@@ -341,6 +346,7 @@ model Document {
   title     String
   content   String?   @db.Text  // rich text (TipTap JSON or Markdown)
   type      DocType   @default(OTHER)
+  status    DocStatus @default(DRAFT)
   version   Int       @default(1)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt

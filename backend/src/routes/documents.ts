@@ -100,7 +100,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 });
 
 router.patch('/:id', async (req: AuthRequest, res: Response) => {
-  const { title, content, type, spaceId, taskIds } = req.body;
+  const { title, content, type, spaceId, status, taskIds } = req.body;
   const doc = await prisma.document.update({
     where: { id: req.params.id },
     data: {
@@ -108,7 +108,9 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       ...(content !== undefined && { content }),
       ...(type    !== undefined && { type }),
       ...(spaceId !== undefined && { spaceId }),
-      version: { increment: 1 },
+      ...(status  !== undefined && { status }),
+      // Increment version only when content/title changes, not on status-only updates
+      ...((title !== undefined || content !== undefined) && { version: { increment: 1 } }),
       ...(taskIds !== undefined && {
         linkedTasks: { deleteMany: {}, create: taskIds.map((tid: string) => ({ taskId: tid })) },
       }),

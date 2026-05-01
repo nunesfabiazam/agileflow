@@ -1,4 +1,4 @@
-import { useEditor, EditorContent, Extension } from '@tiptap/react';
+import { useEditor, EditorContent, Extension, NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import { Plugin } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -11,6 +11,116 @@ import TaskItem from '@tiptap/extension-task-item';
 import Highlight from '@tiptap/extension-highlight';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { uploadsApi } from '../../api';
+
+// ── Resizable Image NodeView ─────────────────────────────────────────────────
+function ResizableImageView({ node, updateAttributes, selected }: any) {
+  const { src, alt, title, width } = node.attrs as { src: string; alt?: string; title?: string; width?: number };
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [resizing, setResizing] = useState(false);
+
+  const startResize = (e: React.MouseEvent, corner: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = imgRef.current?.offsetWidth ?? (width ?? 400);
+    const startH = imgRef.current?.offsetHeight ?? 300;
+    const aspect = startH / startW;
+    setResizing(true);
+
+    const onMove = (ev: MouseEvent) => {
+      let newW = startW;
+      if (corner === 'se' || corner === 'ne' || corner === 'e') newW = startW + (ev.clientX - startX);
+      if (corner === 'sw' || corner === 'nw' || corner === 'w') newW = startW - (ev.clientX - startX);
+      newW = Math.max(80, Math.min(newW, 1200));
+      updateAttributes({ width: Math.round(newW), height: Math.round(newW * aspect) });
+    };
+    const onUp = () => {
+      setResizing(false);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  const handleStyle: React.CSSProperties = {
+    position: 'absolute', width: 10, height: 10,
+    background: 'var(--accent)', border: '2px solid #fff',
+    borderRadius: 2, zIndex: 10,
+  };
+
+  return (
+    <NodeViewWrapper
+      as="div"
+      data-drag-handle
+      draggable
+      style={{
+        display: 'inline-block', position: 'relative', maxWidth: '100%',
+        cursor: resizing ? 'se-resize' : 'default',
+        outline: selected ? '2px solid var(--accent)' : 'none',
+        outlineOffset: 2, borderRadius: 8,
+        userSelect: 'none',
+      }}
+    >
+      <img
+        ref={imgRef}
+        src={src}
+        alt={alt}
+        title={title}
+        draggable={false}
+        loading="lazy"
+        style={{
+          display: 'block',
+          width: width ? `${width}px` : '100%',
+          maxWidth: '100%',
+          borderRadius: 8,
+          pointerEvents: resizing ? 'none' : 'auto',
+        }}
+      />
+      {/* Resize handles — only when selected */}
+      {selected && (
+        <>
+          {/* SE */}
+          <div onMouseDown={e => startResize(e, 'se')} style={{ ...handleStyle, bottom: -5, right: -5, cursor: 'se-resize' }} />
+          {/* SW */}
+          <div onMouseDown={e => startResize(e, 'sw')} style={{ ...handleStyle, bottom: -5, left: -5, cursor: 'sw-resize' }} />
+          {/* NE */}
+          <div onMouseDown={e => startResize(e, 'ne')} style={{ ...handleStyle, top: -5, right: -5, cursor: 'ne-resize' }} />
+          {/* NW */}
+          <div onMouseDown={e => startResize(e, 'nw')} style={{ ...handleStyle, top: -5, left: -5, cursor: 'nw-resize' }} />
+          {/* Width badge */}
+          {resizing && (
+            <div style={{
+              position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
+              background: 'rgba(0,0,0,.7)', color: '#fff', fontSize: 11, padding: '2px 8px',
+              borderRadius: 4, pointerEvents: 'none', whiteSpace: 'nowrap',
+            }}>
+              {width ?? '—'}px
+            </div>
+          )}
+        </>
+      )}
+    </NodeViewWrapper>
+  );
+}
+
+// ── ResizableImage extension (extends Image) ──────────────────────────────────
+const ResizableImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width:  { default: null, parseHTML: el => el.getAttribute('width')  ? Number(el.getAttribute('width'))  : null },
+      height: { default: null, parseHTML: el => el.getAttribute('height') ? Number(el.getAttribute('height')) : null },
+    };
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['img', { ...HTMLAttributes, draggable: false, style: HTMLAttributes.width ? `width:${HTMLAttributes.width}px` : '' }];
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(ResizableImageView as any);
+  },
+});
 
 // ── styles ───────────────────────────────────────────────────────────────────
 const EDITOR_CSS = `
@@ -56,8 +166,9 @@ const EDITOR_CSS = `
 .ProseMirror mark { background: rgba(251,191,36,.35); border-radius: 3px; padding: 1px 2px; }
 .ProseMirror a { color: var(--accent); text-decoration: underline; cursor: pointer; }
 .ProseMirror a:hover { opacity: 0.8; }
-.ProseMirror img { max-width: 100%; border-radius: 8px; margin: 0.5em 0; display: block; }
-.ProseMirror img.ProseMirror-selectednode { outline: 3px solid var(--accent); }
+.ProseMirror img { max-width: 100%; border-radius: 8px; margin: 0; display: block; }
+/* NodeView wrapper for resizable images */
+.ProseMirror [data-drag-handle] { margin: 0.5em 0; }
 .ProseMirror table { border-collapse: collapse; width: 100%; margin: 1.2em 0; table-layout: fixed; }
 .ProseMirror table td, .ProseMirror table th {
   border: 1px solid var(--border); padding: 8px 12px; vertical-align: top;
@@ -219,7 +330,7 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
       Underline,
       Highlight,
       Link.configure({ openOnClick: false }),
-      Image.configure({ inline: false, allowBase64: true, HTMLAttributes: { loading: 'lazy' } }),
+      ResizableImage.configure({ inline: false, allowBase64: true }),
       TableKit.configure({}),
       TaskList,
       TaskItem.configure({ nested: true }),

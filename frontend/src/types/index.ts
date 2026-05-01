@@ -3,7 +3,8 @@ export type UserRole = 'ADMIN' | 'PM' | 'DEVELOPER' | 'QA' | 'UX' | 'SCRUM_MASTE
 export type TaskType = 'STORY' | 'BUG' | 'TASK' | 'SPIKE' | 'EPIC' | 'SUBTASK';
 export type TaskPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 export type SprintStatus = 'PLANNING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
-export type DocType = 'SPEC' | 'DIAGRAM' | 'DESIGN' | 'REFERENCE' | 'TEMPLATE' | 'TEST_PLAN' | 'WIREFRAME' | 'RUNBOOK' | 'OTHER';
+export type DocType   = 'SPEC' | 'DIAGRAM' | 'DESIGN' | 'REFERENCE' | 'TEMPLATE' | 'TEST_PLAN' | 'WIREFRAME' | 'RUNBOOK' | 'OTHER';
+export type DocStatus = 'DRAFT' | 'PUBLISHED';
 
 // ─── User ─────────────────────────────────────────────────────────────────────
 export interface User {
@@ -135,6 +136,7 @@ export interface Document {
   title: string;
   content?: string;
   type: DocType;
+  status: DocStatus;
   version: number;
   createdAt: string;
   updatedAt: string;
