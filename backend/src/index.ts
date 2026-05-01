@@ -20,6 +20,7 @@ import commentsRouter from './routes/comments';
 import sprintAnalyticsRouter from './routes/sprintAnalytics';
 import timeLogsRouter, { timeReportRouter } from './routes/timeLogs';
 import uploadsRouter from './routes/uploads';
+import driveSetupRouter from './routes/driveSetup';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -50,7 +51,8 @@ app.use('/api/tasks/:taskId/comments', commentsRouter);
 app.use('/api/sprints', sprintAnalyticsRouter);
 app.use('/api/tasks/:taskId/time-logs', timeLogsRouter);
 app.use('/api/time-logs', timeReportRouter);
-app.use('/api/uploads',  uploadsRouter);
+app.use('/api/uploads',    uploadsRouter);
+app.use('/api/drive-setup', driveSetupRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });
