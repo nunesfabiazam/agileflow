@@ -1,4 +1,5 @@
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, Extension } from '@tiptap/react';
+import { Plugin } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';
@@ -9,6 +10,7 @@ import { TaskList } from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Highlight from '@tiptap/extension-highlight';
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { uploadsApi } from '../../api';
 
 // ── styles ───────────────────────────────────────────────────────────────────
 const EDITOR_CSS = `
@@ -64,6 +66,65 @@ const EDITOR_CSS = `
 .ProseMirror .selectedCell:after { background: rgba(99,102,241,0.12); content: ""; left: 0; right: 0; top: 0; bottom: 0; pointer-events: none; position: absolute; z-index: 2; }
 `;
 
+// ── file helpers ─────────────────────────────────────────────────────────────
+const FILE_ICONS: Record<string, string> = {
+  pdf: '📄', doc: '📝', docx: '📝', xls: '📊', xlsx: '📊',
+  ppt: '📊', pptx: '📊', csv: '📋', zip: '🗜️', rar: '🗜️',
+  mp4: '🎥', mov: '🎥', avi: '🎥', mp3: '🎵', wav: '🎵',
+  txt: '📃', md: '📃',
+};
+function fileIcon(filename: string) {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  return FILE_ICONS[ext] ?? '📎';
+}
+function isImageMime(mime: string) { return mime.startsWith('image/'); }
+
+async function uploadAndInsert(file: File, editor: ReturnType<typeof useEditor> | null) {
+  if (!editor) return;
+  try {
+    const res = await uploadsApi.upload(file);
+    const { url, filename, mimetype } = res.data.data;
+    if (isImageMime(mimetype)) {
+      editor.chain().focus().setImage({ src: url, alt: filename }).run();
+    } else {
+      // Insert as a styled download link
+      const icon = fileIcon(filename);
+      const html = `<a href="${url}" target="_blank" rel="noopener noreferrer">${icon} ${filename}</a>`;
+      editor.chain().focus().insertContent(html).run();
+    }
+  } catch (e) {
+    console.error('Upload falhou', e);
+    alert('Falha no upload. Tente novamente.');
+  }
+}
+
+// ── ProseMirror plugin: paste & drop images/files ────────────────────────────
+function makeUploadPlugin(getEditor: () => ReturnType<typeof useEditor> | null) {
+  return new Plugin({
+    props: {
+      handlePaste(_view, event) {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        let handled = false;
+        for (const item of Array.from(items)) {
+          if (item.kind === 'file') {
+            const file = item.getAsFile();
+            if (file) { uploadAndInsert(file, getEditor()); handled = true; }
+          }
+        }
+        return handled;
+      },
+      handleDrop(_view, event) {
+        const files = event.dataTransfer?.files;
+        if (!files?.length) return false;
+        event.preventDefault();
+        for (const file of Array.from(files)) { uploadAndInsert(file, getEditor()); }
+        return true;
+      },
+    },
+  });
+}
+
 // ── slash commands ────────────────────────────────────────────────────────────
 type SlashItem = { icon: string; label: string; hint: string; action: (ed: ReturnType<typeof useEditor>) => void };
 
@@ -80,6 +141,7 @@ const SLASH_ITEMS: SlashItem[] = [
   { icon: '⊞',  label: 'Tabela',          hint: 'Inserir 3×3',             action: ed => ed?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   { icon: '—',  label: 'Divisor',         hint: 'Linha horizontal',        action: ed => ed?.chain().focus().setHorizontalRule().run() },
   { icon: '🖼️', label: 'Imagem via URL',  hint: 'Cole a URL da imagem',    action: ed => { const url = prompt('URL da imagem:'); if (url && ed) ed.chain().focus().setImage({ src: url }).run(); } },
+  { icon: '📎', label: 'Upload de arquivo', hint: 'Imagem, PDF, DOCX, etc.', action: _ed => { document.getElementById('tiptap-file-upload')?.click(); } },
 ];
 
 // ── Toolbar button ────────────────────────────────────────────────────────────
@@ -142,6 +204,8 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
     onHeadingsChange(headings);
   }, [onHeadingsChange]);
 
+  const editorRef = useRef<ReturnType<typeof useEditor>>(null);
+
   const editor = useEditor({
     editable,
     extensions: [
@@ -154,6 +218,13 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
       TableKit.configure({}),
       TaskList,
       TaskItem.configure({ nested: true }),
+      // Paste & drop handler
+      Extension.create({
+        name: 'fileUpload',
+        addProseMirrorPlugins() {
+          return [makeUploadPlugin(() => editorRef.current)];
+        },
+      }),
     ],
     content: content || '',
     onUpdate: ({ editor: ed }) => {
@@ -224,6 +295,9 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
     setLinkUrl('');
   };
 
+  // keep ref in sync so the plugin can access latest editor instance
+  (editorRef as React.MutableRefObject<ReturnType<typeof useEditor>>).current = editor;
+
   if (!editor) return <div style={{ minHeight: 500 }} />;
 
   const filtered = SLASH_ITEMS.filter(i => !slashQuery || i.label.toLowerCase().includes(slashQuery.toLowerCase()));
@@ -286,8 +360,26 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
               </div>
             )}
           </div>
-          {/* Image */}
+          {/* Image via URL */}
           <Btn label="🖼" onClick={() => { const u = prompt('URL da imagem:'); if (u) editor.chain().focus().setImage({ src: u }).run(); }} active={false} title="Imagem via URL" />
+          {/* Upload image or file */}
+          <label title="Carregar imagem ou arquivo" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+            <span style={{
+              padding: '4px 8px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+              background: 'transparent', color: 'var(--text2)', lineHeight: '20px',
+              display: 'flex', alignItems: 'center', height: 28,
+            }}>📎</span>
+            <input
+              type="file"
+              style={{ display: 'none' }}
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.md,.zip,.rar,.mp4,.mov,.mp3,.wav"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) uploadAndInsert(file, editor);
+                e.target.value = '';
+              }}
+            />
+          </label>
           <Sep />
           <Btn label="—" onClick={() => editor.chain().focus().setHorizontalRule().run()} active={false} title="Divisor" />
           <Btn label="↩" onClick={() => editor.chain().undo().run()} active={false} title="Desfazer (⌘Z)" />
@@ -327,6 +419,19 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
           ))}
         </div>
       )}
+
+      {/* ── Hidden file input for slash command upload ──────────────────── */}
+      <input
+        id="tiptap-file-upload"
+        type="file"
+        style={{ display: 'none' }}
+        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.md,.zip,.rar,.mp4,.mov,.mp3,.wav"
+        onChange={e => {
+          const file = e.target.files?.[0];
+          if (file) uploadAndInsert(file, editor);
+          e.target.value = '';
+        }}
+      />
 
       {/* ── Editor content ───────────────────────────────────────────────── */}
       <EditorContent editor={editor} />

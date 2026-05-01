@@ -166,3 +166,16 @@ export const timeLogsApi = {
   report: (params: Record<string, string>) =>
     api.get('/time-logs/report', { params }),
 };
+
+
+export const uploadsApi = {
+  upload: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post<{ success: boolean; data: { url: string; filename: string; mimetype: string; size: number } }>(
+      '/uploads',
+      fd,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+  },
+};

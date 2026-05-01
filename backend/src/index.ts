@@ -19,6 +19,9 @@ import adminUsersRouter from './routes/adminUsers';
 import commentsRouter from './routes/comments';
 import sprintAnalyticsRouter from './routes/sprintAnalytics';
 import timeLogsRouter, { timeReportRouter } from './routes/timeLogs';
+import uploadsRouter from './routes/uploads';
+
+import path from 'path';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +33,9 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(morgan('dev'));
+
+// Serve uploaded files publicly
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use('/api/auth',      authRoutes);
 app.use('/api/users',     userRoutes);
@@ -48,6 +54,7 @@ app.use('/api/tasks/:taskId/comments', commentsRouter);
 app.use('/api/sprints', sprintAnalyticsRouter);
 app.use('/api/tasks/:taskId/time-logs', timeLogsRouter);
 app.use('/api/time-logs', timeReportRouter);
+app.use('/api/uploads',  uploadsRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });
