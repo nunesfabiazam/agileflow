@@ -8,28 +8,30 @@ import { AuthRequest } from '../types';
 const router = Router();
 router.use(authenticate as any);
 
-// ── Google Drive auth ─────────────────────────────────────────────────────────
+// ── Google Drive via OAuth2 (user account — has storage quota) ───────────────
 function getDriveClient() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON não configurado.');
-  const creds = JSON.parse(raw);
+  const clientId     = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
 
-  const auth = new google.auth.GoogleAuth({
-    credentials: creds,
-    scopes: ['https://www.googleapis.com/auth/drive'],
-  });
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error('Variáveis GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET ou GOOGLE_DRIVE_REFRESH_TOKEN não configuradas.');
+  }
+
+  const auth = new google.auth.OAuth2(clientId, clientSecret);
+  auth.setCredentials({ refresh_token: refreshToken });
   return google.drive({ version: 'v3', auth });
 }
 
 const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID ?? '1_2zCaVgmWv2bYDVf_3gBF5Nll9JX11hJ';
 
-// ── Multer: keep files in memory (buffer), no local disk ─────────────────────
+// ── Multer: memória (sem disco local) ────────────────────────────────────────
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB
 });
 
-// ── POST /api/uploads ─────────────────────────────────────────────────────────
+// ── POST /api/uploads ────────────────────────────────────────────────────────
 router.post('/', upload.single('file'), async (req: AuthRequest, res: Response) => {
   if (!req.file) {
     res.status(400).json({ success: false, error: 'Nenhum arquivo enviado.' });
@@ -39,7 +41,7 @@ router.post('/', upload.single('file'), async (req: AuthRequest, res: Response) 
   try {
     const drive = getDriveClient();
 
-    // Upload to Drive
+    // Upload para o Drive
     const driveRes = await drive.files.create({
       requestBody: {
         name:    req.file.originalname,
@@ -54,15 +56,14 @@ router.post('/', upload.single('file'), async (req: AuthRequest, res: Response) 
 
     const fileId = driveRes.data.id!;
 
-    // Make file accessible to anyone with the link
+    // Torna público (qualquer pessoa com o link pode visualizar)
     await drive.permissions.create({
       fileId,
       requestBody: { role: 'reader', type: 'anyone' },
     });
 
-    // Build URLs
+    // URL de acesso
     const isImage = req.file.mimetype.startsWith('image/');
-    // For images: direct render URL; for others: view/download URL
     const url = isImage
       ? `https://drive.google.com/uc?export=view&id=${fileId}`
       : `https://drive.google.com/file/d/${fileId}/view`;
@@ -78,8 +79,9 @@ router.post('/', upload.single('file'), async (req: AuthRequest, res: Response) 
       },
     });
   } catch (err: any) {
-    console.error('Drive upload error:', err?.message ?? err);
-    res.status(500).json({ success: false, error: 'Falha no upload para o Google Drive.' });
+    const msg = err?.message ?? String(err);
+    console.error('Drive upload error:', msg);
+    res.status(500).json({ success: false, error: 'Falha no upload para o Google Drive.', detail: msg });
   }
 });
 

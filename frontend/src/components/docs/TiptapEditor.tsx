@@ -209,7 +209,11 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
   const editor = useEditor({
     editable,
     extensions: [
-      StarterKit.configure({ codeBlock: { languageClassPrefix: 'language-' } }),
+      StarterKit.configure({
+        codeBlock: { languageClassPrefix: 'language-' },
+        link: false,       // added separately with custom config
+        underline: false,  // added separately
+      }),
       Placeholder.configure({ placeholder }),
       Underline,
       Highlight,
