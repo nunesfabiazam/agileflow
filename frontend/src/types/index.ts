@@ -138,6 +138,8 @@ export interface Document {
   type: DocType;
   status: DocStatus;
   version: number;
+  coverIdx?: number | null;
+  docEmoji?: string | null;
   createdAt: string;
   updatedAt: string;
   space?: Pick<DocSpace, 'id' | 'name'>;

@@ -100,16 +100,19 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 });
 
 router.patch('/:id', async (req: AuthRequest, res: Response) => {
-  const { title, content, type, spaceId, status, taskIds } = req.body;
+  const { title, content, type, spaceId, status, coverIdx, docEmoji, taskIds } = req.body;
   const doc = await prisma.document.update({
     where: { id: req.params.id },
     data: {
-      ...(title   !== undefined && { title }),
-      ...(content !== undefined && { content }),
-      ...(type    !== undefined && { type }),
-      ...(spaceId !== undefined && { spaceId }),
-      ...(status  !== undefined && { status }),
-      // Increment version only when content/title changes, not on status-only updates
+      ...(title    !== undefined && { title }),
+      ...(content  !== undefined && { content }),
+      ...(type     !== undefined && { type }),
+      ...(spaceId  !== undefined && { spaceId }),
+      ...(status   !== undefined && { status }),
+      // coverIdx can be null (remove cover) or a number
+      ...(coverIdx !== undefined && { coverIdx: coverIdx === null ? null : Number(coverIdx) }),
+      ...(docEmoji !== undefined && { docEmoji }),
+      // Increment version only when content/title changes, not on status/cover/emoji-only updates
       ...((title !== undefined || content !== undefined) && { version: { increment: 1 } }),
       ...(taskIds !== undefined && {
         linkedTasks: { deleteMany: {}, create: taskIds.map((tid: string) => ({ taskId: tid })) },

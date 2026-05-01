@@ -74,7 +74,7 @@ export const documentsApi = {
   list:         (params: Record<string, string>) => api.get<ApiResponse<Document[]>>('/documents', { params }),
   get:          (id: string) => api.get<ApiResponse<Document>>(`/documents/${id}`),
   create:       (data: Partial<Document> & { projectId: string; taskIds?: string[] }) => api.post<ApiResponse<Document>>('/documents', data),
-  update:       (id: string, data: Partial<Document> & { taskIds?: string[] }) => api.patch<ApiResponse<Document>>(`/documents/${id}`, data),
+  update:       (id: string, data: Partial<Document> & { taskIds?: string[]; coverIdx?: number | null; docEmoji?: string }) => api.patch<ApiResponse<Document>>(`/documents/${id}`, data),
   clone:        (id: string, projectId?: string) => api.post<ApiResponse<Document>>(`/documents/${id}/clone`, projectId ? { projectId } : {}),
   remove:       (id: string) => api.delete(`/documents/${id}`),
 };

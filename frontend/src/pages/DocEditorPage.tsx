@@ -51,13 +51,14 @@ export function DocEditorPage() {
   const [headings, setHeadings]   = useState<Heading[]>([]);
   const [showToc, setShowToc]     = useState(true);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const emojiBtnRef = useRef<HTMLButtonElement>(null);
+  // Fixed position for emoji picker (computed on click to escape stacking contexts)
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
+  const emojiBtnRef  = useRef<HTMLButtonElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const [showMeta, setShowMeta]   = useState(false);
 
   // Status workflow
   const [docStatus, setDocStatus] = useState<DocStatus>('DRAFT');
-  // When a PUBLISHED doc has "Editar" clicked, isEditing = true (local only)
   const [isEditing, setIsEditing] = useState(false);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -80,7 +81,10 @@ export function DocEditorPage() {
       setContent(doc.content ?? '');
       setDocType(doc.type);
       setSpaceId(doc.space?.id);
-      setDocStatus((doc as any).status ?? 'DRAFT');
+      setDocStatus(doc.status ?? 'DRAFT');
+      // Restore persisted cover and emoji
+      setCoverIdx(doc.coverIdx ?? null);
+      setEmoji(doc.docEmoji ?? '📝');
       setReady(true);
     }
   }, [doc, ready]);
@@ -101,11 +105,13 @@ export function DocEditorPage() {
   }, [showEmojiPicker]);
 
   const saveMut = useMutation({
-    mutationFn: (vars: { t: string; c: string; dt: DocType; si?: string; st?: DocStatus }) =>
+    mutationFn: (vars: { t: string; c: string; dt: DocType; si?: string; st?: DocStatus; ci?: number | null; de?: string }) =>
       documentsApi.update(id!, {
         title: vars.t, content: vars.c, type: vars.dt,
         spaceId: vars.si,
-        ...(vars.st && { status: vars.st }),
+        ...(vars.st !== undefined && { status: vars.st }),
+        ...(vars.ci !== undefined && { coverIdx: vars.ci }),
+        ...(vars.de !== undefined && { docEmoji: vars.de }),
       }),
     onSuccess: (res) => {
       const updated = res.data.data;
@@ -118,25 +124,36 @@ export function DocEditorPage() {
   });
 
   const scheduleSave = useCallback(
-    (t: string, c: string, dt: DocType, si?: string) => {
+    (t: string, c: string, dt: DocType, si?: string, ci?: number | null, de?: string) => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       setSaveState('saving');
-      saveTimer.current = setTimeout(() => saveMut.mutate({ t, c, dt, si }), 1500);
+      saveTimer.current = setTimeout(() => saveMut.mutate({ t, c, dt, si, ci, de }), 1500);
     },
     [saveMut],
   );
 
-  const handleTitleChange   = (v: string) => { setTitle(v);   scheduleSave(v,     content, docType, spaceId); };
-  const handleContentChange = (v: string) => { setContent(v); scheduleSave(title, v,       docType, spaceId); };
-  const handleTypeChange    = (v: DocType) => { setDocType(v); scheduleSave(title, content, v,       spaceId); };
-  const handleSpaceChange   = (v: string) => { const s = v || undefined; setSpaceId(s); scheduleSave(title, content, docType, s); };
+  const handleTitleChange   = (v: string) => { setTitle(v);   scheduleSave(v,     content, docType, spaceId, coverIdx, emoji); };
+  const handleContentChange = (v: string) => { setContent(v); scheduleSave(title, v,       docType, spaceId, coverIdx, emoji); };
+  const handleTypeChange    = (v: DocType) => { setDocType(v); scheduleSave(title, content, v,       spaceId, coverIdx, emoji); };
+  const handleSpaceChange   = (v: string) => { const s = v || undefined; setSpaceId(s); scheduleSave(title, content, docType, s, coverIdx, emoji); };
+
+  // Immediate save when cover or emoji changes (no debounce needed)
+  const handleCoverChange = (idx: number | null) => {
+    setCoverIdx(idx);
+    if (id) documentsApi.update(id, { coverIdx: idx, docEmoji: emoji });
+  };
+  const handleEmojiChange = (e: string) => {
+    setEmoji(e);
+    setShowEmojiPicker(false);
+    if (id) documentsApi.update(id, { coverIdx, docEmoji: e });
+  };
 
   // Publish: save current state + set status PUBLISHED + exit editing mode
   const handlePublish = () => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaveState('saving');
     saveMut.mutate(
-      { t: title, c: content, dt: docType, si: spaceId, st: 'PUBLISHED' },
+      { t: title, c: content, dt: docType, si: spaceId, st: 'PUBLISHED', ci: coverIdx, de: emoji },
       { onSuccess: () => { setIsEditing(false); } },
     );
   };
@@ -146,14 +163,14 @@ export function DocEditorPage() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaveState('saving');
     saveMut.mutate(
-      { t: title, c: content, dt: docType, si: spaceId },
+      { t: title, c: content, dt: docType, si: spaceId, ci: coverIdx, de: emoji },
       { onSuccess: () => { setIsEditing(false); } },
     );
   };
 
   // Revert to draft
   const handleRevertToDraft = () => {
-    saveMut.mutate({ t: title, c: content, dt: docType, si: spaceId, st: 'DRAFT' });
+    saveMut.mutate({ t: title, c: content, dt: docType, si: spaceId, st: 'DRAFT', ci: coverIdx, de: emoji });
     setDocStatus('DRAFT');
     setIsEditing(false);
   };
@@ -313,7 +330,7 @@ export function DocEditorPage() {
             <div style={{ height: 180, background: COVER_GRADIENTS[coverIdx], position: 'relative' }}>
               {editable && (
                 <button
-                  onClick={() => setCoverIdx(null)}
+                  onClick={() => handleCoverChange(null)}
                   style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,.35)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}
                 >✕ Remover capa</button>
               )}
@@ -351,7 +368,7 @@ export function DocEditorPage() {
                         }}
                       >
                         {EMOJIS.map(e => (
-                          <div key={e} onClick={() => { setEmoji(e); setShowEmojiPicker(false); }}
+                          <div key={e} onClick={() => handleEmojiChange(e)}
                             style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, cursor: 'pointer', borderRadius: 6, background: e === emoji ? 'var(--bg4)' : 'transparent' }}>
                             {e}
                           </div>
@@ -365,7 +382,7 @@ export function DocEditorPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginLeft: 8 }}>
                     <span style={{ fontSize: 12, color: 'var(--text3)' }}>Capa:</span>
                     {COVER_GRADIENTS.map((g, idx) => (
-                      <div key={idx} onClick={() => setCoverIdx(idx)} style={{ width: 24, height: 18, borderRadius: 4, background: g, cursor: 'pointer', border: '1px solid rgba(255,255,255,.1)' }} />
+                      <div key={idx} onClick={() => handleCoverChange(idx)} style={{ width: 24, height: 18, borderRadius: 4, background: g, cursor: 'pointer', border: '1px solid rgba(255,255,255,.1)' }} />
                     ))}
                   </div>
                 )}

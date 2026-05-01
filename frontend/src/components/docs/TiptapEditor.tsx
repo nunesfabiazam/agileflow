@@ -10,6 +10,8 @@ import { TableKit } from '@tiptap/extension-table';
 import { TaskList } from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Highlight from '@tiptap/extension-highlight';
+import Color from '@tiptap/extension-color';
+import { TextStyle } from '@tiptap/extension-text-style';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { uploadsApi } from '../../api';
 
@@ -275,6 +277,13 @@ function AlignIcon({ type }: { type: 'left' | 'center' | 'right' | 'justify' }) 
   );
 }
 
+// ── Text colors ──────────────────────────────────────────────────────────────
+const TEXT_COLORS = [
+  '#ef4444', '#f97316', '#f59e0b', '#eab308',
+  '#22c55e', '#14b8a6', '#3b82f6', '#6366f1',
+  '#8b5cf6', '#ec4899', '#64748b', '#1e293b',
+];
+
 // ── Toolbar button ────────────────────────────────────────────────────────────
 function Btn({ label, onClick, active, title }: { label: React.ReactNode; onClick: () => void; active: boolean; title?: string }) {
   return (
@@ -307,11 +316,13 @@ interface Props {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrever… ou pressione "/" para comandos', editable = true, onHeadingsChange }: Props) {
-  const [slashQuery, setSlashQuery] = useState('');
-  const [slashOpen, setSlashOpen]   = useState(false);
-  const [slashIndex, setSlashIndex] = useState(0);
-  const [linkUrl, setLinkUrl]       = useState('');
-  const [linkOpen, setLinkOpen]     = useState(false);
+  const [slashQuery, setSlashQuery]       = useState('');
+  const [slashOpen, setSlashOpen]         = useState(false);
+  const [slashIndex, setSlashIndex]       = useState(0);
+  const [linkUrl, setLinkUrl]             = useState('');
+  const [linkOpen, setLinkOpen]           = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
   const slashQueryRef = useRef(slashQuery);
   const slashOpenRef  = useRef(slashOpen);
   slashQueryRef.current = slashQuery;
@@ -352,6 +363,8 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
       ResizableImage.configure({ inline: false, allowBase64: true }),
       TableKit.configure({}),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      TextStyle,
+      Color,
       TaskList,
       TaskItem.configure({ nested: true }),
       // Paste & drop handler
@@ -445,6 +458,18 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
     }
   }, [editor, editable]);
 
+  // Close color picker on outside click
+  useEffect(() => {
+    if (!showColorPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+        setShowColorPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showColorPicker]);
+
   if (!editor) return <div style={{ minHeight: 500 }} />;
 
   const filtered = SLASH_ITEMS.filter(i => !slashQuery || i.label.toLowerCase().includes(slashQuery.toLowerCase()));
@@ -466,6 +491,69 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
           <Btn label="S̶"  onClick={() => editor.chain().focus().toggleStrike().run()}    active={editor.isActive('strike')}    title="Tachado" />
           <Btn label="`"  onClick={() => editor.chain().focus().toggleCode().run()}      active={editor.isActive('code')}      title="Código inline" />
           <Btn label="🖊" onClick={() => editor.chain().focus().toggleHighlight().run()} active={editor.isActive('highlight')} title="Destacar" />
+          {/* Text color picker */}
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onMouseDown={e => { e.preventDefault(); setShowColorPicker(v => !v); }}
+              title="Cor do texto"
+              style={{
+                padding: '4px 8px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+                fontWeight: 800, border: 'none', minWidth: 28, height: 28,
+                background: showColorPicker ? 'var(--accent)' : 'transparent',
+                color: showColorPicker ? '#fff' : (editor.getAttributes('textStyle').color ?? 'var(--text2)'),
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+              }}
+            >
+              <span style={{ lineHeight: 1, fontSize: 13 }}>A</span>
+              <div style={{
+                width: 14, height: 3, borderRadius: 2,
+                background: editor.getAttributes('textStyle').color ?? '#6366f1',
+              }} />
+            </button>
+            {showColorPicker && (
+              <div
+                ref={colorPickerRef}
+                style={{
+                  position: 'absolute', top: '110%', left: 0, zIndex: 200,
+                  background: 'var(--bg2)', border: '1px solid var(--border)',
+                  borderRadius: 10, padding: 8, boxShadow: '0 6px 24px rgba(0,0,0,.3)',
+                  display: 'grid', gridTemplateColumns: 'repeat(6, 24px)', gap: 4, width: 'max-content',
+                }}
+              >
+                {/* Remove color */}
+                <div
+                  onMouseDown={e => { e.preventDefault(); editor.chain().focus().unsetColor().run(); setShowColorPicker(false); }}
+                  title="Remover cor"
+                  style={{
+                    width: 24, height: 24, borderRadius: 5, cursor: 'pointer',
+                    border: '1.5px solid var(--border)', background: 'var(--bg3)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, color: 'var(--text3)', gridColumn: 'span 6',
+                    boxSizing: 'border-box',
+                  }}
+                >✕ Remover cor</div>
+                {TEXT_COLORS.map(c => (
+                  <div
+                    key={c}
+                    onMouseDown={e => { e.preventDefault(); editor.chain().focus().setColor(c).run(); setShowColorPicker(false); }}
+                    title={c}
+                    style={{
+                      width: 24, height: 24, borderRadius: 5, cursor: 'pointer',
+                      background: c,
+                      border: editor.getAttributes('textStyle').color === c
+                        ? '2.5px solid var(--accent)'
+                        : '1.5px solid rgba(0,0,0,.12)',
+                      boxSizing: 'border-box',
+                      transition: 'transform .1s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.15)')}
+                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
           <Sep />
           <Btn label="H1" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} active={editor.isActive('heading', { level: 1 })} title="Título 1" />
           <Btn label="H2" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} active={editor.isActive('heading', { level: 2 })} title="Título 2" />
