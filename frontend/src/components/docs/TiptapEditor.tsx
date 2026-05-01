@@ -5,6 +5,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
+import TextAlign from '@tiptap/extension-text-align';
 import { TableKit } from '@tiptap/extension-table';
 import { TaskList } from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -256,6 +257,24 @@ const SLASH_ITEMS: SlashItem[] = [
   { icon: '📎', label: 'Upload de arquivo', hint: 'Imagem, PDF, DOCX, etc.', action: _ed => { document.getElementById('tiptap-file-upload')?.click(); } },
 ];
 
+// ── Align icons (SVG) ────────────────────────────────────────────────────────
+function AlignIcon({ type }: { type: 'left' | 'center' | 'right' | 'justify' }) {
+  // Each entry: [x1, x2] for 4 lines at y=3,7,11,15
+  const coords: [number,number][] =
+    type === 'left'    ? [[1,15],[1,10],[1,15],[1,10]] :
+    type === 'center'  ? [[1,15],[3,13],[1,15],[3,13]] :
+    type === 'right'   ? [[1,15],[6,15],[1,15],[6,15]] :
+    /* justify */        [[1,15],[1,15],[1,15],[1,12]];
+
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      {coords.map(([x1, x2], i) => (
+        <line key={i} x1={x1} y1={i * 4 + 2} x2={x2} y2={i * 4 + 2} />
+      ))}
+    </svg>
+  );
+}
+
 // ── Toolbar button ────────────────────────────────────────────────────────────
 function Btn({ label, onClick, active, title }: { label: React.ReactNode; onClick: () => void; active: boolean; title?: string }) {
   return (
@@ -332,6 +351,7 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
       Link.configure({ openOnClick: false }),
       ResizableImage.configure({ inline: false, allowBase64: true }),
       TableKit.configure({}),
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
       TaskList,
       TaskItem.configure({ nested: true }),
       // Paste & drop handler
@@ -443,6 +463,12 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
           <Btn label="•≡"  onClick={() => editor.chain().focus().toggleBulletList().run()}  active={editor.isActive('bulletList')}  title="Lista" />
           <Btn label="1≡"  onClick={() => editor.chain().focus().toggleOrderedList().run()} active={editor.isActive('orderedList')} title="Lista numerada" />
           <Btn label="☑"   onClick={() => editor.chain().focus().toggleTaskList().run()}    active={editor.isActive('taskList')}    title="Lista de tarefas" />
+          <Sep />
+          {/* Text alignment */}
+          <Btn label={<AlignIcon type="left"    />} onClick={() => editor.chain().focus().setTextAlign('left').run()}    active={editor.isActive({ textAlign: 'left' })}    title="Alinhar à esquerda" />
+          <Btn label={<AlignIcon type="center"  />} onClick={() => editor.chain().focus().setTextAlign('center').run()}  active={editor.isActive({ textAlign: 'center' })}  title="Centralizar" />
+          <Btn label={<AlignIcon type="right"   />} onClick={() => editor.chain().focus().setTextAlign('right').run()}   active={editor.isActive({ textAlign: 'right' })}   title="Alinhar à direita" />
+          <Btn label={<AlignIcon type="justify" />} onClick={() => editor.chain().focus().setTextAlign('justify').run()} active={editor.isActive({ textAlign: 'justify' })} title="Justificar" />
           <Sep />
           <Btn label={'" '} onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} title="Citação" />
           <Btn label="</>"  onClick={() => editor.chain().focus().toggleCodeBlock().run()}  active={editor.isActive('codeBlock')}  title="Bloco de código" />

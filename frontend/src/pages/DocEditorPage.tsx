@@ -51,6 +51,8 @@ export function DocEditorPage() {
   const [headings, setHeadings]   = useState<Heading[]>([]);
   const [showToc, setShowToc]     = useState(true);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
   const [showMeta, setShowMeta]   = useState(false);
 
   // Status workflow
@@ -82,6 +84,21 @@ export function DocEditorPage() {
       setReady(true);
     }
   }, [doc, ready]);
+
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node) &&
+        emojiBtnRef.current && !emojiBtnRef.current.contains(e.target as Node)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showEmojiPicker]);
 
   const saveMut = useMutation({
     mutationFn: (vars: { t: string; c: string; dt: DocType; si?: string; st?: DocStatus }) =>
@@ -312,21 +329,36 @@ export function DocEditorPage() {
                 {/* Emoji picker */}
                 <div style={{ position: 'relative' }}>
                   <button
+                    ref={emojiBtnRef}
                     onClick={() => setShowEmojiPicker(v => !v)}
                     style={{ fontSize: 36, background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1, padding: 0 }}
                     title="Mudar emoji"
                   >{emoji}</button>
-                  {showEmojiPicker && (
-                    <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 50, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: 10, display: 'flex', flexWrap: 'wrap', gap: 4, width: 240, boxShadow: '0 4px 20px rgba(0,0,0,.25)' }}>
-                      {EMOJIS.map(e => (
-                        <div key={e} onClick={() => { setEmoji(e); setShowEmojiPicker(false); }}
-                          style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, cursor: 'pointer', borderRadius: 6, background: e === emoji ? 'var(--bg4)' : 'transparent' }}>
-                          {e}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                  {showEmojiPicker && (() => {
+                    const rect = emojiBtnRef.current?.getBoundingClientRect();
+                    return (
+                      <div
+                        ref={emojiPickerRef}
+                        style={{
+                          position: 'fixed',
+                          top: rect ? rect.bottom + 8 : 200,
+                          left: rect ? rect.left : 100,
+                          zIndex: 9999,
+                          background: 'var(--bg2)', border: '1px solid var(--border)',
+                          borderRadius: 10, padding: 10,
+                          display: 'flex', flexWrap: 'wrap', gap: 4, width: 240,
+                          boxShadow: '0 8px 32px rgba(0,0,0,.35)',
+                        }}
+                      >
+                        {EMOJIS.map(e => (
+                          <div key={e} onClick={() => { setEmoji(e); setShowEmojiPicker(false); }}
+                            style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, cursor: 'pointer', borderRadius: 6, background: e === emoji ? 'var(--bg4)' : 'transparent' }}>
+                            {e}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}</div>
 
                 {/* Add cover */}
                 {coverIdx === null && (
