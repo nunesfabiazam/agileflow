@@ -63,9 +63,11 @@ router.post('/', upload.single('file'), async (req: AuthRequest, res: Response) 
     });
 
     // URL de acesso
+    // thumbnail?sz=w2000 retorna os bytes da imagem diretamente (sem redirect/HTML)
+    // uc?export=view redireciona para uma página HTML — não funciona em <img src>
     const isImage = req.file.mimetype.startsWith('image/');
     const url = isImage
-      ? `https://drive.google.com/uc?export=view&id=${fileId}`
+      ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`
       : `https://drive.google.com/file/d/${fileId}/view`;
 
     res.json({

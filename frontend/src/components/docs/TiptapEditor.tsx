@@ -56,7 +56,8 @@ const EDITOR_CSS = `
 .ProseMirror mark { background: rgba(251,191,36,.35); border-radius: 3px; padding: 1px 2px; }
 .ProseMirror a { color: var(--accent); text-decoration: underline; cursor: pointer; }
 .ProseMirror a:hover { opacity: 0.8; }
-.ProseMirror img { max-width: 100%; border-radius: 8px; margin: 0.5em 0; }
+.ProseMirror img { max-width: 100%; border-radius: 8px; margin: 0.5em 0; display: block; }
+.ProseMirror img.ProseMirror-selectednode { outline: 3px solid var(--accent); }
 .ProseMirror table { border-collapse: collapse; width: 100%; margin: 1.2em 0; table-layout: fixed; }
 .ProseMirror table td, .ProseMirror table th {
   border: 1px solid var(--border); padding: 8px 12px; vertical-align: top;
@@ -218,7 +219,7 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
       Underline,
       Highlight,
       Link.configure({ openOnClick: false }),
-      Image.configure({ inline: false, allowBase64: true }),
+      Image.configure({ inline: false, allowBase64: true, HTMLAttributes: { loading: 'lazy' } }),
       TableKit.configure({}),
       TaskList,
       TaskItem.configure({ nested: true }),
