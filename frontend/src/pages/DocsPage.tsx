@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { documentsApi } from '../api';
+import { documentsApi, importApi } from '../api';
 import { Avatar } from '../components/Shared/Avatar';
 import type { Document, DocType, DocSpace } from '../types';
 
@@ -39,9 +39,13 @@ export function DocsPage() {
   const [viewMode, setViewMode]           = useState<'grid' | 'list'>('list');
   const [showCreate, setShowCreate]       = useState(false);
   const [showNewSpace, setShowNewSpace]   = useState(false);
+  const [showImport, setShowImport]       = useState(false);
   const [newDoc, setNewDoc]               = useState({ title: '', type: 'SPEC' as DocType });
   const [newSpace, setNewSpace]           = useState({ name: '', icon: '📁' });
   const [filterType, setFilterType]       = useState<string>('');
+  const [importState, setImportState]     = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [importMsg, setImportMsg]         = useState('');
+  const importFileRef                     = useRef<HTMLInputElement>(null);
 
   const { data: spaces = [] } = useQuery<DocSpace[]>({
     queryKey: ['spaces', activeProjectId],
@@ -88,10 +92,27 @@ export function DocsPage() {
     mutationFn: (id: string) => documentsApi.clone(id),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['docs', activeProjectId] });
-      // Navigate to cloned doc for editing
       if (res.data.data?.id) navigate(`/documents/${res.data.data.id}`);
     },
   });
+
+  const handleImportFile = async (file: File) => {
+    if (!activeProjectId) return;
+    setImportState('loading');
+    setImportMsg('');
+    try {
+      const spaceId = activeSpaceId !== 'all' ? activeSpaceId : undefined;
+      const res = await importApi.document(file, activeProjectId, spaceId);
+      qc.invalidateQueries({ queryKey: ['docs', activeProjectId] });
+      setImportState('done');
+      const docId = (res.data as any).data?.id;
+      setImportMsg(`✅ "${file.name}" importado com sucesso!`);
+      if (docId) setTimeout(() => { setShowImport(false); setImportState('idle'); navigate(`/documents/${docId}`); }, 1500);
+    } catch (e: any) {
+      setImportState('error');
+      setImportMsg(e?.response?.data?.error ?? 'Erro ao importar arquivo.');
+    }
+  };
 
   if (!activeProjectId) return (
     <div className="empty-state">
@@ -177,6 +198,7 @@ export function DocsPage() {
               <button onClick={() => setViewMode('list')} style={{ padding: '5px 10px', fontSize: 13, border: 'none', cursor: 'pointer', background: viewMode === 'list' ? 'var(--accent)' : 'var(--bg3)', color: viewMode === 'list' ? '#fff' : 'var(--text2)' }} title="Lista">☰</button>
               <button onClick={() => setViewMode('grid')} style={{ padding: '5px 10px', fontSize: 13, border: 'none', cursor: 'pointer', background: viewMode === 'grid' ? 'var(--accent)' : 'var(--bg3)', color: viewMode === 'grid' ? '#fff' : 'var(--text2)' }} title="Grade">⊞</button>
             </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setShowImport(true); setImportState('idle'); setImportMsg(''); }} style={{ border: '1px solid var(--border)' }}>⬆ Importar</button>
             <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>+ Novo Documento</button>
           </div>
         </div>
@@ -317,6 +339,102 @@ export function DocsPage() {
           )}
         </div>
       </div>
+
+      {/* ── Import document modal ────────────────────────────────────────────── */}
+      {showImport && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowImport(false)}>
+          <div className="modal" style={{ width: 520, padding: 28 }}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>⬆ Importar Documento</div>
+            <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 24 }}>
+              Importe um arquivo para criar um novo documento automaticamente no projeto.
+            </div>
+
+            {/* Format options */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+              {[
+                { ext: '.md',   icon: '📝', label: 'Markdown',     desc: 'Arquivos .md com texto e código' },
+                { ext: '.docx', icon: '📄', label: 'Word',         desc: 'Documentos Microsoft Word' },
+                { ext: '.pdf',  icon: '🔴', label: 'PDF',          desc: 'Converte texto do PDF em doc' },
+                { ext: '.html', icon: '🌐', label: 'HTML',         desc: 'Páginas HTML / Confluence export' },
+              ].map(f => (
+                <div
+                  key={f.ext}
+                  onClick={() => { if (importState !== 'loading') { if (importFileRef.current) { importFileRef.current.accept = f.ext; importFileRef.current.click(); } } }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '14px 16px', borderRadius: 10,
+                    border: '1px solid var(--border)', cursor: importState === 'loading' ? 'wait' : 'pointer',
+                    background: 'var(--bg3)', transition: 'all .15s',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLDivElement).style.background = 'rgba(99,102,241,.06)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.background = 'var(--bg3)'; }}
+                >
+                  <span style={{ fontSize: 28 }}>{f.icon}</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text1)' }}>{f.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{f.desc}</div>
+                    <code style={{ fontSize: 10, color: 'var(--accent)', marginTop: 2, display: 'block' }}>{f.ext}</code>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Drag & drop area */}
+            <div
+              onDragOver={e => { e.preventDefault(); (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--accent)'; }}
+              onDragLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; }}
+              onDrop={e => {
+                e.preventDefault();
+                (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)';
+                const file = e.dataTransfer.files[0];
+                if (file) handleImportFile(file);
+              }}
+              onClick={() => importFileRef.current?.click()}
+              style={{
+                border: '2px dashed var(--border)', borderRadius: 10, padding: '20px 0',
+                textAlign: 'center', cursor: importState === 'loading' ? 'wait' : 'pointer',
+                marginBottom: 16, transition: 'border-color .15s',
+                background: 'var(--bg1)',
+              }}
+            >
+              {importState === 'loading' ? (
+                <div style={{ color: 'var(--text2)', fontSize: 13 }}>⏳ Importando...</div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 28, marginBottom: 6 }}>📂</div>
+                  <div style={{ fontSize: 13, color: 'var(--text2)', fontWeight: 600 }}>Arraste um arquivo aqui</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>ou clique para selecionar · md, docx, pdf, html</div>
+                </>
+              )}
+            </div>
+
+            {/* Hidden file input */}
+            <input
+              ref={importFileRef}
+              type="file"
+              accept=".md,.markdown,.docx,.pdf,.html,.htm"
+              style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = ''; }}
+            />
+
+            {/* Status message */}
+            {importMsg && (
+              <div style={{
+                padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 13, fontWeight: 600,
+                background: importState === 'done' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)',
+                color: importState === 'done' ? '#16a34a' : '#ef4444',
+                border: `1px solid ${importState === 'done' ? 'rgba(34,197,94,.3)' : 'rgba(239,68,68,.3)'}`,
+              }}>
+                {importMsg}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setShowImport(false)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Create document modal ─────────────────────────────────────────── */}
       {showCreate && (

@@ -434,6 +434,17 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
   // keep ref in sync so the plugin can access latest editor instance
   (editorRef as React.MutableRefObject<ReturnType<typeof useEditor>>).current = editor;
 
+  // Sync editable prop → live editor instance when it changes
+  // (useEditor only reads `editable` at init time; must call setEditable for updates)
+  useEffect(() => {
+    if (!editor) return;
+    if (editor.isEditable !== editable) {
+      editor.setEditable(editable);
+      // Force re-render by toggling focus briefly
+      if (editable) editor.commands.focus('end');
+    }
+  }, [editor, editable]);
+
   if (!editor) return <div style={{ minHeight: 500 }} />;
 
   const filtered = SLASH_ITEMS.filter(i => !slashQuery || i.label.toLowerCase().includes(slashQuery.toLowerCase()));
