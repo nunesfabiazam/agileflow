@@ -322,7 +322,9 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
   const [linkUrl, setLinkUrl]             = useState('');
   const [linkOpen, setLinkOpen]           = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [colorPickerPos, setColorPickerPos] = useState({ top: 0, left: 0 });
   const colorPickerRef = useRef<HTMLDivElement>(null);
+  const colorBtnRef = useRef<HTMLButtonElement>(null);
   const slashQueryRef = useRef(slashQuery);
   const slashOpenRef  = useRef(slashOpen);
   slashQueryRef.current = slashQuery;
@@ -462,7 +464,10 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
   useEffect(() => {
     if (!showColorPicker) return;
     const handler = (e: MouseEvent) => {
-      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+      if (
+        colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node) &&
+        colorBtnRef.current  && !colorBtnRef.current.contains(e.target as Node)
+      ) {
         setShowColorPicker(false);
       }
     };
@@ -492,68 +497,32 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
           <Btn label="`"  onClick={() => editor.chain().focus().toggleCode().run()}      active={editor.isActive('code')}      title="Código inline" />
           <Btn label="🖊" onClick={() => editor.chain().focus().toggleHighlight().run()} active={editor.isActive('highlight')} title="Destacar" />
           {/* Text color picker */}
-          <div style={{ position: 'relative' }}>
-            <button
-              type="button"
-              onMouseDown={e => { e.preventDefault(); setShowColorPicker(v => !v); }}
-              title="Cor do texto"
-              style={{
-                padding: '4px 8px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
-                fontWeight: 800, border: 'none', minWidth: 28, height: 28,
-                background: showColorPicker ? 'var(--accent)' : 'transparent',
-                color: showColorPicker ? '#fff' : (editor.getAttributes('textStyle').color ?? 'var(--text2)'),
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
-              }}
-            >
-              <span style={{ lineHeight: 1, fontSize: 13 }}>A</span>
-              <div style={{
-                width: 14, height: 3, borderRadius: 2,
-                background: editor.getAttributes('textStyle').color ?? '#6366f1',
-              }} />
-            </button>
-            {showColorPicker && (
-              <div
-                ref={colorPickerRef}
-                style={{
-                  position: 'absolute', top: '110%', left: 0, zIndex: 200,
-                  background: 'var(--bg2)', border: '1px solid var(--border)',
-                  borderRadius: 10, padding: 8, boxShadow: '0 6px 24px rgba(0,0,0,.3)',
-                  display: 'grid', gridTemplateColumns: 'repeat(6, 24px)', gap: 4, width: 'max-content',
-                }}
-              >
-                {/* Remove color */}
-                <div
-                  onMouseDown={e => { e.preventDefault(); editor.chain().focus().unsetColor().run(); setShowColorPicker(false); }}
-                  title="Remover cor"
-                  style={{
-                    width: 24, height: 24, borderRadius: 5, cursor: 'pointer',
-                    border: '1.5px solid var(--border)', background: 'var(--bg3)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, color: 'var(--text3)', gridColumn: 'span 6',
-                    boxSizing: 'border-box',
-                  }}
-                >✕ Remover cor</div>
-                {TEXT_COLORS.map(c => (
-                  <div
-                    key={c}
-                    onMouseDown={e => { e.preventDefault(); editor.chain().focus().setColor(c).run(); setShowColorPicker(false); }}
-                    title={c}
-                    style={{
-                      width: 24, height: 24, borderRadius: 5, cursor: 'pointer',
-                      background: c,
-                      border: editor.getAttributes('textStyle').color === c
-                        ? '2.5px solid var(--accent)'
-                        : '1.5px solid rgba(0,0,0,.12)',
-                      boxSizing: 'border-box',
-                      transition: 'transform .1s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.15)')}
-                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+          <button
+            ref={colorBtnRef}
+            type="button"
+            onMouseDown={e => {
+              e.preventDefault();
+              if (!showColorPicker && colorBtnRef.current) {
+                const r = colorBtnRef.current.getBoundingClientRect();
+                setColorPickerPos({ top: r.bottom + 6, left: r.left });
+              }
+              setShowColorPicker(v => !v);
+            }}
+            title="Cor do texto"
+            style={{
+              padding: '4px 8px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+              fontWeight: 800, border: 'none', minWidth: 28, height: 28,
+              background: showColorPicker ? 'var(--accent)' : 'transparent',
+              color: showColorPicker ? '#fff' : (editor.getAttributes('textStyle').color ?? 'var(--text2)'),
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+            }}
+          >
+            <span style={{ lineHeight: 1, fontSize: 13 }}>A</span>
+            <div style={{
+              width: 14, height: 3, borderRadius: 2,
+              background: editor.getAttributes('textStyle').color ?? '#6366f1',
+            }} />
+          </button>
           <Sep />
           <Btn label="H1" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} active={editor.isActive('heading', { level: 1 })} title="Título 1" />
           <Btn label="H2" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} active={editor.isActive('heading', { level: 2 })} title="Título 2" />
@@ -657,6 +626,54 @@ export function TiptapEditor({ content, onChange, placeholder = 'Comece a escrev
                 <div style={{ fontSize: 11, color: 'var(--text3)' }}>{item.hint}</div>
               </div>
             </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Color picker (fixed, escapes sticky toolbar stacking context) ── */}
+      {showColorPicker && (
+        <div
+          ref={colorPickerRef}
+          style={{
+            position: 'fixed',
+            top: colorPickerPos.top,
+            left: colorPickerPos.left,
+            zIndex: 9999,
+            background: 'var(--bg2)', border: '1px solid var(--border)',
+            borderRadius: 10, padding: 8, boxShadow: '0 6px 24px rgba(0,0,0,.4)',
+            display: 'grid', gridTemplateColumns: 'repeat(6, 24px)', gap: 4,
+            width: 'max-content',
+          }}
+        >
+          {/* Remove color */}
+          <div
+            onMouseDown={e => { e.preventDefault(); editor.chain().focus().unsetColor().run(); setShowColorPicker(false); }}
+            title="Remover cor"
+            style={{
+              height: 24, borderRadius: 5, cursor: 'pointer',
+              border: '1.5px solid var(--border)', background: 'var(--bg3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, color: 'var(--text3)', gridColumn: 'span 6',
+              padding: '0 8px', boxSizing: 'border-box', whiteSpace: 'nowrap',
+            }}
+          >✕ Remover cor</div>
+          {TEXT_COLORS.map(c => (
+            <div
+              key={c}
+              onMouseDown={e => { e.preventDefault(); editor.chain().focus().setColor(c).run(); setShowColorPicker(false); }}
+              title={c}
+              style={{
+                width: 24, height: 24, borderRadius: 5, cursor: 'pointer',
+                background: c,
+                border: editor.getAttributes('textStyle').color === c
+                  ? '2.5px solid var(--accent)'
+                  : '1.5px solid rgba(0,0,0,.12)',
+                boxSizing: 'border-box',
+                transition: 'transform .1s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.15)')}
+              onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+            />
           ))}
         </div>
       )}
