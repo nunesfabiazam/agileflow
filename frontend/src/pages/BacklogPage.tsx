@@ -27,8 +27,9 @@ export function BacklogPage() {
   const [filterPriority, setFilterPriority] = useState('');
   const [filterEpic,     setFilterEpic]     = useState('');
   const [filterAssignee, setFilterAssignee] = useState('');
-  const hasFilter = !!(filterSearch || filterType || filterPriority || filterEpic || filterAssignee);
-  const clearFilters = () => { setFilterSearch(''); setFilterType(''); setFilterPriority(''); setFilterEpic(''); setFilterAssignee(''); };
+  const [filterStatus,   setFilterStatus]   = useState('');
+  const hasFilter = !!(filterSearch || filterType || filterPriority || filterEpic || filterAssignee || filterStatus);
+  const clearFilters = () => { setFilterSearch(''); setFilterType(''); setFilterPriority(''); setFilterEpic(''); setFilterAssignee(''); setFilterStatus(''); };
 
   const [showNewSprint, setShowNewSprint] = useState(false);
   const [newSprint, setNewSprint] = useState({ name: '', goal: '', startDate: '', endDate: '' });
@@ -170,6 +171,12 @@ export function BacklogPage() {
     return [...seen.entries()];
   }, [tasks]);
 
+  const statusOptions = useMemo(() => {
+    const seen = new Map<string, string>(); // columnId → name
+    tasks.forEach(t => { if (t.column) seen.set(t.column.name, t.column.name); });
+    return [...seen.keys()].sort();
+  }, [tasks]);
+
   // ── Apply filters ───────────────────────────────────────────────────────────
   const filteredTasks = useMemo(() => tasks.filter(t => {
     if (filterSearch   && !t.title.toLowerCase().includes(filterSearch.toLowerCase())) return false;
@@ -177,6 +184,7 @@ export function BacklogPage() {
     if (filterPriority && t.priority !== filterPriority) return false;
     if (filterEpic     && t.epic?.id !== filterEpic)   return false;
     if (filterAssignee && !t.assignees?.some(a => a.user.id === filterAssignee)) return false;
+    if (filterStatus   && t.column?.name !== filterStatus) return false;
     return true;
   }), [tasks, filterSearch, filterType, filterPriority, filterEpic, filterAssignee]);
 
@@ -265,6 +273,18 @@ export function BacklogPage() {
           >
             <option value="">Responsável</option>
             {assigneeOptions.map(([id, u]) => <option key={id} value={id}>{u.name}</option>)}
+          </select>
+        )}
+
+        {/* Status (Kanban column) */}
+        {statusOptions.length > 0 && (
+          <select
+            value={filterStatus}
+            onChange={e => setFilterStatus(e.target.value)}
+            style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterStatus ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', maxWidth: 160 }}
+          >
+            <option value="">Status</option>
+            {statusOptions.map(name => <option key={name} value={name}>{name}</option>)}
           </select>
         )}
 
