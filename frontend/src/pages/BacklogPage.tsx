@@ -4,8 +4,13 @@ import { tasksApi, sprintsApi } from '../api';
 import type { Task, Sprint } from '../types';
 import { Badge } from '../components/Shared/Badge';
 import { Avatar } from '../components/Shared/Avatar';
-import { useState, useCallback, memo } from 'react';
+import { useState, useCallback, memo, useMemo } from 'react';
 import { TaskDetailModal } from '../components/kanban/TaskDetailModal';
+
+const TYPES     = ['STORY','BUG','TASK','SPIKE','EPIC','SUBTASK'];
+const TYPE_LABEL: Record<string,string> = { STORY:'História', BUG:'Bug', TASK:'Tarefa', SPIKE:'Spike', EPIC:'Épico', SUBTASK:'Subtarefa' };
+const PRIORITIES = ['CRITICAL','HIGH','MEDIUM','LOW'];
+const PRIO_LABEL: Record<string,string> = { CRITICAL:'Crítica', HIGH:'Alta', MEDIUM:'Média', LOW:'Baixa' };
 
 const STATUS_LABEL: Record<string, string> = {
   PLANNING: 'Planejado', ACTIVE: 'Ativa', COMPLETED: 'Concluída', CANCELLED: 'Cancelada',
@@ -15,6 +20,15 @@ export function BacklogPage() {
   const activeProjectId = useAppStore(s => s.activeProjectId);
   const qc = useQueryClient();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  // ── Filters ─────────────────────────────────────────────────────────────────
+  const [filterSearch,   setFilterSearch]   = useState('');
+  const [filterType,     setFilterType]     = useState('');
+  const [filterPriority, setFilterPriority] = useState('');
+  const [filterEpic,     setFilterEpic]     = useState('');
+  const [filterAssignee, setFilterAssignee] = useState('');
+  const hasFilter = !!(filterSearch || filterType || filterPriority || filterEpic || filterAssignee);
+  const clearFilters = () => { setFilterSearch(''); setFilterType(''); setFilterPriority(''); setFilterEpic(''); setFilterAssignee(''); };
 
   const [showNewSprint, setShowNewSprint] = useState(false);
   const [newSprint, setNewSprint] = useState({ name: '', goal: '', startDate: '', endDate: '' });
@@ -143,18 +157,41 @@ export function BacklogPage() {
     },
   });
 
+  // ── Derived filter options ──────────────────────────────────────────────────
+  const epicOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    tasks.forEach(t => { if (t.epic) seen.set(t.epic.id, t.epic.title); });
+    return [...seen.entries()];
+  }, [tasks]);
+
+  const assigneeOptions = useMemo(() => {
+    const seen = new Map<string, { name: string; color: string }>();
+    tasks.forEach(t => t.assignees?.forEach(a => { if (!seen.has(a.user.id)) seen.set(a.user.id, { name: a.user.name, color: a.user.color }); }));
+    return [...seen.entries()];
+  }, [tasks]);
+
+  // ── Apply filters ───────────────────────────────────────────────────────────
+  const filteredTasks = useMemo(() => tasks.filter(t => {
+    if (filterSearch   && !t.title.toLowerCase().includes(filterSearch.toLowerCase())) return false;
+    if (filterType     && t.type !== filterType)       return false;
+    if (filterPriority && t.priority !== filterPriority) return false;
+    if (filterEpic     && t.epic?.id !== filterEpic)   return false;
+    if (filterAssignee && !t.assignees?.some(a => a.user.id === filterAssignee)) return false;
+    return true;
+  }), [tasks, filterSearch, filterType, filterPriority, filterEpic, filterAssignee]);
+
   if (!activeProjectId) {
     return <div className="empty-state"><div className="empty-icon">📋</div><div className="empty-text">Selecione um projeto para ver o backlog.</div></div>;
   }
 
-  const backlogTasks    = tasks.filter(t => !t.sprint);
+  const backlogTasks    = filteredTasks.filter(t => !t.sprint);
   const activeSprints   = (sprints as Sprint[]).filter(s => s.status === 'ACTIVE');
   const planningSprints = (sprints as Sprint[]).filter(s => s.status === 'PLANNING');
   const completedSprints = (sprints as Sprint[]).filter(s => s.status === 'COMPLETED');
   const targetSprints   = [...activeSprints, ...planningSprints];
 
   const completingSprint      = showComplete ? (sprints as Sprint[]).find(s => s.id === showComplete) : null;
-  const completingSprintTasks = showComplete ? tasks.filter(t => t.sprint?.id === showComplete) : [];
+  const completingSprintTasks = showComplete ? tasks.filter(t => t.sprint?.id === showComplete) : []; // usa tasks não-filtrado para não perder tasks incompletas
   const incompleteTasks       = completingSprintTasks.filter(t => !t.column?.isDefault);
   const otherSprints          = (sprints as Sprint[]).filter(s => s.id !== showComplete && s.status !== 'COMPLETED');
 
@@ -170,8 +207,88 @@ export function BacklogPage() {
         </div>
       </div>
 
+      {/* ── Filter bar ─────────────────────────────────────────────────────── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8,
+        padding: '10px 14px', marginBottom: 20,
+        background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10,
+      }}>
+        {/* Search */}
+        <div style={{ position: 'relative', flex: '1 1 180px', minWidth: 160, maxWidth: 280 }}>
+          <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5 }}>🔍</span>
+          <input
+            value={filterSearch}
+            onChange={e => setFilterSearch(e.target.value)}
+            placeholder="Buscar por título..."
+            style={{ width: '100%', paddingLeft: 30, fontSize: 13, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text1)', boxSizing: 'border-box' }}
+          />
+        </div>
+
+        {/* Type */}
+        <select
+          value={filterType}
+          onChange={e => setFilterType(e.target.value)}
+          style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterType ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer' }}
+        >
+          <option value="">Tipo</option>
+          {TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
+        </select>
+
+        {/* Priority */}
+        <select
+          value={filterPriority}
+          onChange={e => setFilterPriority(e.target.value)}
+          style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterPriority ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer' }}
+        >
+          <option value="">Prioridade</option>
+          {PRIORITIES.map(p => <option key={p} value={p}>{PRIO_LABEL[p]}</option>)}
+        </select>
+
+        {/* Epic */}
+        {epicOptions.length > 0 && (
+          <select
+            value={filterEpic}
+            onChange={e => setFilterEpic(e.target.value)}
+            style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterEpic ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', maxWidth: 160 }}
+          >
+            <option value="">Épico</option>
+            {epicOptions.map(([id, title]) => <option key={id} value={id}>{title}</option>)}
+          </select>
+        )}
+
+        {/* Assignee */}
+        {assigneeOptions.length > 0 && (
+          <select
+            value={filterAssignee}
+            onChange={e => setFilterAssignee(e.target.value)}
+            style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterAssignee ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', maxWidth: 160 }}
+          >
+            <option value="">Responsável</option>
+            {assigneeOptions.map(([id, u]) => <option key={id} value={id}>{u.name}</option>)}
+          </select>
+        )}
+
+        {/* Result count + clear */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+          {hasFilter && (
+            <>
+              <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+                {filteredTasks.length} de {tasks.length} item{tasks.length !== 1 ? 's' : ''}
+              </span>
+              <button
+                onClick={clearFilters}
+                style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text3)', cursor: 'pointer' }}
+              >✕ Limpar filtros</button>
+            </>
+          )}
+          {!hasFilter && (
+            <span style={{ fontSize: 12, color: 'var(--text3)' }}>{tasks.length} item{tasks.length !== 1 ? 's' : ''} no total</span>
+          )}
+        </div>
+      </div>
+
       {[...activeSprints, ...planningSprints, ...completedSprints].map(sprint => {
-        const sprintTasks = tasks.filter(t => t.sprint?.id === sprint.id);
+        const sprintTasks = filteredTasks.filter(t => t.sprint?.id === sprint.id);
         const pts  = sprintTasks.reduce((a, t) => a + (t.storyPoints ?? 0), 0);
         const done = sprintTasks.filter(t => t.column?.isDefault).length;
 
