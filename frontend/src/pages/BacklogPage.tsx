@@ -51,7 +51,7 @@ export function BacklogPage() {
 
   const { data: tasks = [] } = useQuery<Task[]>({
     queryKey: ['tasks', activeProjectId],
-    queryFn: () => tasksApi.list({ projectId: activeProjectId! }).then(r => r.data.data ?? []),
+    queryFn: () => tasksApi.list({ projectId: activeProjectId!, limit: '500' }).then(r => r.data.data ?? []),
     enabled: !!activeProjectId,
   });
 

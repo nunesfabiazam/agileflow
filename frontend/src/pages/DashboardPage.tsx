@@ -29,7 +29,7 @@ export function DashboardPage() {
 
   const { data: allTasks = [] } = useQuery({
     queryKey: ['tasks-all', activeProjectId],
-    queryFn: () => tasksApi.list({ projectId: activeProjectId! }).then(r => r.data.data ?? []),
+    queryFn: () => tasksApi.list({ projectId: activeProjectId!, limit: '500' }).then(r => r.data.data ?? []),
     enabled: !!activeProjectId,
   });
 

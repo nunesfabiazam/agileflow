@@ -41,7 +41,7 @@ const taskSelect = {
 
 // GET /api/tasks?projectId=&sprintId=&columnId=&type=&priority=
 router.get('/', async (req: AuthRequest, res: Response) => {
-  const { projectId, sprintId, columnId, type, priority, epicId, search, page = '1', limit = '50' } = req.query as Record<string, string>;
+  const { projectId, sprintId, columnId, type, priority, epicId, search, page = '1', limit = '500' } = req.query as Record<string, string>;
   const where: Record<string, unknown> = {};
   if (projectId)  where.projectId = projectId;
   if (sprintId)   where.sprintId  = sprintId === 'null' ? null : sprintId;

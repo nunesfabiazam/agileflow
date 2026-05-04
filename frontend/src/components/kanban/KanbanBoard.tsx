@@ -39,7 +39,7 @@ export function KanbanBoard({ projectId, sprintId }: Props) {
 
   const { data: tasksData } = useQuery({
     queryKey: ['tasks', projectId, sprintId],
-    queryFn: () => tasksApi.list({ projectId, ...(sprintId ? { sprintId } : {}) }).then(r => r.data.data ?? []),
+    queryFn: () => tasksApi.list({ projectId, limit: '500', ...(sprintId ? { sprintId } : {}) }).then(r => r.data.data ?? []),
   });
 
   const cols  = (colsData  ?? []) as KanbanColumn[];
