@@ -1,7 +1,7 @@
 import { useAppStore } from '../store/useAppStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { tasksApi, sprintsApi } from '../api';
-import type { Task, Sprint } from '../types';
+import { tasksApi, sprintsApi, columnsApi, epicsApi } from '../api';
+import type { Task, Sprint, KanbanColumn, Epic } from '../types';
 import { Badge } from '../components/Shared/Badge';
 import { Avatar } from '../components/Shared/Avatar';
 import { useState, useCallback, memo, useMemo } from 'react';
@@ -38,7 +38,7 @@ export function BacklogPage() {
 
   // ── Bulk selection ──────────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkSprintId, setBulkSprintId] = useState('');
+  // bulk fields declared below with the mutation
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
@@ -61,6 +61,18 @@ export function BacklogPage() {
   const { data: sprints = [] } = useQuery<Sprint[]>({
     queryKey: ['sprints', activeProjectId],
     queryFn: () => sprintsApi.list(activeProjectId!).then(r => r.data.data ?? []),
+    enabled: !!activeProjectId,
+  });
+
+  const { data: columns = [] } = useQuery<KanbanColumn[]>({
+    queryKey: ['columns', activeProjectId],
+    queryFn: () => columnsApi.list(activeProjectId!).then(r => r.data.data ?? []),
+    enabled: !!activeProjectId,
+  });
+
+  const { data: epics = [] } = useQuery<Epic[]>({
+    queryKey: ['epics', activeProjectId],
+    queryFn: () => epicsApi.list(activeProjectId!).then(r => r.data.data ?? []),
     enabled: !!activeProjectId,
   });
 
@@ -131,30 +143,28 @@ export function BacklogPage() {
     onSettled: () => qc.invalidateQueries({ queryKey: ['tasks', activeProjectId] }),
   });
 
-  // ── Bulk sprint assignment ──────────────────────────────────────────────────
+  // ── Bulk fields state ───────────────────────────────────────────────────────
+  const [bulkSprintId,   setBulkSprintId]   = useState('');
+  const [bulkColumnId,   setBulkColumnId]   = useState('');
+  const [bulkPriority,   setBulkPriority]   = useState('');
+  const [bulkType,       setBulkType]       = useState('');
+  const [bulkEpicId,     setBulkEpicId]     = useState('');
+
+  const hasBulkChange = !!(bulkSprintId || bulkColumnId || bulkPriority || bulkType || bulkEpicId);
+
+  const clearBulk = () => {
+    setBulkSprintId(''); setBulkColumnId(''); setBulkPriority('');
+    setBulkType(''); setBulkEpicId('');
+  };
+
+  // ── Bulk update mutation ────────────────────────────────────────────────────
   const bulkMoveMut = useMutation({
-    mutationFn: ({ ids, sprintId }: { ids: string[]; sprintId: string | null }) =>
-      tasksApi.bulkUpdate(ids, { sprintId }),
-    onMutate: async ({ ids, sprintId }) => {
-      await qc.cancelQueries({ queryKey: ['tasks', activeProjectId] });
-      const prev = qc.getQueriesData<Task[]>({ queryKey: ['tasks', activeProjectId] });
-      const targetSprint = sprintId ? (sprints as Sprint[]).find(s => s.id === sprintId) : undefined;
-      qc.setQueriesData<Task[]>({ queryKey: ['tasks', activeProjectId] }, (old) => {
-        if (!old) return old;
-        return old.map(t => ids.includes(t.id)
-          ? { ...t, sprint: targetSprint ? { id: targetSprint.id, name: targetSprint.name } : undefined }
-          : t
-        );
-      });
-      return { prev };
-    },
-    onError: (_err, _vars, ctx: any) => {
-      ctx?.prev?.forEach(([key, data]: [any, any]) => qc.setQueryData(key, data));
-    },
+    mutationFn: ({ ids, data }: { ids: string[]; data: Record<string, any> }) =>
+      tasksApi.bulkUpdate(ids, data),
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['tasks', activeProjectId] });
       clearSelection();
-      setBulkSprintId('');
+      clearBulk();
     },
   });
 
@@ -369,36 +379,103 @@ export function BacklogPage() {
         {/* ── Bulk action bar ── */}
         {selectedCount > 0 && (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            background: 'rgba(99,102,241,.1)', border: '1px solid var(--accent)',
-            borderRadius: 8, padding: '8px 14px', marginBottom: 10,
+            background: 'rgba(99,102,241,.08)', border: '1px solid var(--accent)',
+            borderRadius: 10, padding: '12px 16px', marginBottom: 12,
           }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent2)' }}>
-              {selectedCount} {selectedCount === 1 ? 'item selecionado' : 'itens selecionados'}
-            </span>
-            <div style={{ flex: 1 }} />
-            <select
-              value={bulkSprintId}
-              onChange={e => setBulkSprintId(e.target.value)}
-              style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text2)' }}
-            >
-              <option value="">— Mover para Sprint...</option>
-              <option value="__backlog__">📋 Backlog (remover sprint)</option>
-              {targetSprints.map(s => (
-                <option key={s.id} value={s.id}>{s.status === 'ACTIVE' ? '🟢 ' : '📅 '}{s.name}</option>
-              ))}
-            </select>
-            <button
-              className="btn btn-primary btn-sm"
-              disabled={!bulkSprintId || bulkMoveMut.isPending}
-              onClick={() => {
-                const sprintId = bulkSprintId === '__backlog__' ? null : bulkSprintId;
-                bulkMoveMut.mutate({ ids: [...selectedIds].filter(id => backlogIds.includes(id)), sprintId });
-              }}
-            >
-              {bulkMoveMut.isPending ? 'Movendo...' : '✓ Aplicar'}
-            </button>
-            <button className="btn btn-ghost btn-sm" onClick={clearSelection}>✕ Cancelar</button>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>
+                ✏️ {selectedCount} {selectedCount === 1 ? 'item selecionado' : 'itens selecionados'}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--text3)' }}>— escolha os campos a alterar:</span>
+              <div style={{ flex: 1 }} />
+              <button className="btn btn-ghost btn-sm" onClick={() => { clearSelection(); clearBulk(); }}>✕ Cancelar seleção</button>
+            </div>
+
+            {/* Field selectors */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+
+              {/* Status (column) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Status</span>
+                <select value={bulkColumnId} onChange={e => setBulkColumnId(e.target.value)}
+                  style={{ fontSize: 12, height: 32, borderRadius: 7, border: `1px solid ${bulkColumnId ? 'var(--accent)' : 'var(--border)'}`, background: bulkColumnId ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', minWidth: 140 }}>
+                  <option value="">— não alterar —</option>
+                  {(columns as KanbanColumn[]).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+
+              {/* Priority */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Prioridade</span>
+                <select value={bulkPriority} onChange={e => setBulkPriority(e.target.value)}
+                  style={{ fontSize: 12, height: 32, borderRadius: 7, border: `1px solid ${bulkPriority ? 'var(--accent)' : 'var(--border)'}`, background: bulkPriority ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', minWidth: 120 }}>
+                  <option value="">— não alterar —</option>
+                  {PRIORITIES.map(p => <option key={p} value={p}>{PRIO_LABEL[p]}</option>)}
+                </select>
+              </div>
+
+              {/* Type */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Tipo</span>
+                <select value={bulkType} onChange={e => setBulkType(e.target.value)}
+                  style={{ fontSize: 12, height: 32, borderRadius: 7, border: `1px solid ${bulkType ? 'var(--accent)' : 'var(--border)'}`, background: bulkType ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', minWidth: 120 }}>
+                  <option value="">— não alterar —</option>
+                  {TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
+                </select>
+              </div>
+
+              {/* Epic */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Épico</span>
+                <select value={bulkEpicId} onChange={e => setBulkEpicId(e.target.value)}
+                  style={{ fontSize: 12, height: 32, borderRadius: 7, border: `1px solid ${bulkEpicId ? 'var(--accent)' : 'var(--border)'}`, background: bulkEpicId ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', minWidth: 140 }}>
+                  <option value="">— não alterar —</option>
+                  <option value="__none__">🚫 Remover épico</option>
+                  {(epics as Epic[]).map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
+                </select>
+              </div>
+
+              {/* Sprint */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Sprint</span>
+                <select value={bulkSprintId} onChange={e => setBulkSprintId(e.target.value)}
+                  style={{ fontSize: 12, height: 32, borderRadius: 7, border: `1px solid ${bulkSprintId ? 'var(--accent)' : 'var(--border)'}`, background: bulkSprintId ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', minWidth: 160 }}>
+                  <option value="">— não alterar —</option>
+                  <option value="__backlog__">📋 Mover para backlog</option>
+                  {targetSprints.map(s => <option key={s.id} value={s.id}>{s.status === 'ACTIVE' ? '🟢 ' : '📅 '}{s.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Apply button */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {!hasBulkChange && <span style={{ fontSize: 12, color: 'var(--text3)' }}>Selecione ao menos um campo para alterar.</span>}
+              {hasBulkChange && (
+                <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+                  Alterando: {[bulkColumnId && 'status', bulkPriority && 'prioridade', bulkType && 'tipo', bulkEpicId && 'épico', bulkSprintId && 'sprint'].filter(Boolean).join(', ')}
+                </span>
+              )}
+              <div style={{ flex: 1 }} />
+              {hasBulkChange && (
+                <button className="btn btn-ghost btn-sm" onClick={clearBulk}>↩ Limpar campos</button>
+              )}
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={!hasBulkChange || bulkMoveMut.isPending}
+                onClick={() => {
+                  const data: Record<string, any> = {};
+                  if (bulkColumnId)  data.columnId  = bulkColumnId;
+                  if (bulkPriority)  data.priority  = bulkPriority;
+                  if (bulkType)      data.type      = bulkType;
+                  if (bulkEpicId)    data.epicId    = bulkEpicId === '__none__' ? null : bulkEpicId;
+                  if (bulkSprintId)  data.sprintId  = bulkSprintId === '__backlog__' ? null : bulkSprintId;
+                  bulkMoveMut.mutate({ ids: [...selectedIds], data });
+                }}
+              >
+                {bulkMoveMut.isPending ? 'Aplicando...' : `✓ Aplicar em ${selectedCount} ${selectedCount === 1 ? 'item' : 'itens'}`}
+              </button>
+            </div>
           </div>
         )}
 
@@ -410,7 +487,7 @@ export function BacklogPage() {
             onSelect={setSelectedTask}
             showMoveToSprint
             sprints={targetSprints}
-            onMoveToSprint={(taskId, sprintId) => moveTaskMut.mutate({ taskId, sprintId })}
+            onMoveToSprint={(taskId, sprintId) => moveTaskMut.mutate({ taskId, sprintId: sprintId })}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleAll={() => toggleAll(backlogIds)}

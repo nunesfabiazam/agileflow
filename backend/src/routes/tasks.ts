@@ -127,11 +127,11 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// PATCH /api/tasks/bulk — update multiple tasks at once (sprint, priority, epic)
+// PATCH /api/tasks/bulk — update multiple tasks at once
 router.patch('/bulk', async (req: AuthRequest, res: Response) => {
   const { ids, data } = req.body as {
     ids: string[];
-    data: { sprintId?: string | null; priority?: string; epicId?: string | null; columnId?: string };
+    data: { sprintId?: string | null; priority?: string; type?: string; epicId?: string | null; columnId?: string | null };
   };
   if (!ids || !Array.isArray(ids) || ids.length === 0) {
     res.status(400).json({ success: false, error: 'ids obrigatório.' });
