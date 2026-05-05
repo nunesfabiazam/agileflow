@@ -291,6 +291,7 @@ router.post('/jira-csv', upload.single('file'), async (req: AuthRequest, res: Re
 
     // ── PASS 2: create Tasks (skip rows that are pure Epics) ─────────────────
     let created = 0, skipped = 0;
+    const force = req.body.force === 'true';
 
     for (const [i, t] of parsed.entries()) {
       if (!t.title) { skipped++; continue; }
@@ -317,10 +318,14 @@ router.post('/jira-csv', upload.single('file'), async (req: AuthRequest, res: Re
         }
       }
 
-      // Skip if already imported
+      // Skip or overwrite existing tasks
       if (t.issueKey) {
         const exists = await prisma.task.findFirst({ where: { taskKey: t.issueKey, projectId } });
-        if (exists) { skipped++; continue; }
+        if (exists) {
+          if (!force) { skipped++; continue; }
+          // force=true: delete existing task (assignees cascade) then recreate
+          await prisma.task.delete({ where: { id: exists.id } });
+        }
       }
 
       // Resolve assignee
@@ -508,6 +513,7 @@ router.post('/jira-xml', upload.single('file'), async (req: AuthRequest, res: Re
 
     // ── Pass 2: create Tasks ────────────────────────────────────────────────
     let created = 0, skipped = 0;
+    const force = req.body.force === 'true';
     for (const [i, t] of parsed.entries()) {
       if (!t.title) { skipped++; continue; }
 
@@ -527,10 +533,13 @@ router.post('/jira-xml', upload.single('file'), async (req: AuthRequest, res: Re
         }
       }
 
-      // Skip duplicates
+      // Skip or overwrite duplicates
       if (t.issueKey) {
         const exists = await prisma.task.findFirst({ where: { taskKey: t.issueKey, projectId } });
-        if (exists) { skipped++; continue; }
+        if (exists) {
+          if (!force) { skipped++; continue; }
+          await prisma.task.delete({ where: { id: exists.id } });
+        }
       }
 
       const assigneeId = findUserId(t.assigneeRaw);

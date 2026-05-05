@@ -17,6 +17,7 @@ export function ImportPage() {
   const { activeProjectId } = useAppStore();
   const [selected, setSelected] = useState<ImportType | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [force, setForce] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -30,9 +31,9 @@ export function ImportPage() {
     try {
       let res;
       switch (selected) {
-        case 'jira-csv':        res = await importApi.jiraCsv(file, activeProjectId);        break;
-        case 'jira-json':       res = await importApi.jiraJson(file, activeProjectId);       break;
-        case 'jira-xml':        res = await importApi.jiraXml(file, activeProjectId);        break;
+        case 'jira-csv':        res = await importApi.jiraCsv(file, activeProjectId, force);        break;
+        case 'jira-json':       res = await importApi.jiraJson(file, activeProjectId);              break;
+        case 'jira-xml':        res = await importApi.jiraXml(file, activeProjectId, force);        break;
         case 'confluence-html': res = await importApi.confluenceHtml(file, activeProjectId); break;
         case 'excel-tasks':     res = await importApi.excelTasks(file, activeProjectId);     break;
         case 'document':        res = await importApi.document(file, activeProjectId);        break;
@@ -65,7 +66,7 @@ export function ImportPage() {
         {IMPORT_OPTIONS.map(opt => (
           <div
             key={opt.id}
-            onClick={() => { setSelected(opt.id); setFile(null); setResult(null); }}
+            onClick={() => { setSelected(opt.id); setFile(null); setResult(null); setForce(false); }}
             style={{
               padding: 16, borderRadius: 10, cursor: 'pointer', transition: 'all .15s',
               background: selected === opt.id ? 'var(--bg3)' : 'var(--bg2)',
@@ -137,11 +138,26 @@ export function ImportPage() {
             </div>
           )}
 
+          {option?.task && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 12, cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={force}
+                onChange={e => setForce(e.target.checked)}
+                style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }}
+              />
+              <span>
+                <strong>Sobrescrever tasks existentes</strong>
+                <span style={{ color: 'var(--text3)', marginLeft: 6 }}>— reimporta mesmo que já existam no projeto</span>
+              </span>
+            </label>
+          )}
+
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-primary" onClick={handleImport} disabled={!file || loading || !activeProjectId}>
               {loading ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Importando...</> : '⬆ Importar'}
             </button>
-            <button className="btn btn-ghost" onClick={() => { setFile(null); setResult(null); }}>Limpar</button>
+            <button className="btn btn-ghost" onClick={() => { setFile(null); setResult(null); setForce(false); }}>Limpar</button>
           </div>
 
           {!activeProjectId && (

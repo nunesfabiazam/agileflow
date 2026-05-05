@@ -111,9 +111,10 @@ export const importApi = {
     if (spaceId) fd.append('spaceId', spaceId);
     return api.post<ApiResponse<Document>>('/import/document', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
-  jiraCsv: (file: File, projectId: string) => {
+  jiraCsv: (file: File, projectId: string, force = false) => {
     const fd = new FormData();
     fd.append('file', file); fd.append('projectId', projectId);
+    if (force) fd.append('force', 'true');
     return api.post<ApiResponse<ImportResult>>('/import/jira-csv', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   jiraJson: (file: File, projectId: string) => {
@@ -121,9 +122,10 @@ export const importApi = {
     fd.append('file', file); fd.append('projectId', projectId);
     return api.post<ApiResponse<ImportResult>>('/import/jira-json', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
-  jiraXml: (file: File, projectId: string) => {
+  jiraXml: (file: File, projectId: string, force = false) => {
     const fd = new FormData();
     fd.append('file', file); fd.append('projectId', projectId);
+    if (force) fd.append('force', 'true');
     return api.post<ApiResponse<ImportResult>>('/import/jira-xml', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   confluenceHtml: (file: File, projectId: string, spaceId?: string) => {
