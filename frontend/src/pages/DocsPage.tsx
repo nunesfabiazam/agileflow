@@ -59,11 +59,19 @@ export function DocsPage() {
     queryFn:  () => documentsApi.listSpaces().then(r => r.data.data ?? []),
   });
 
+  const isArchiveView = activeSpaceId === '__archive__';
+
   const { data: docs = [] } = useQuery<Document[]>({
     queryKey: ['docs', activeSpaceId],
     queryFn:  () => documentsApi.list({
-      ...(activeSpaceId !== 'all' ? { spaceId: activeSpaceId } : {}),
+      ...(activeSpaceId !== 'all' && !isArchiveView ? { spaceId: activeSpaceId } : {}),
     }).then(r => r.data.data ?? []),
+    enabled: !isArchiveView,
+  });
+
+  const { data: archivedDocs = [] } = useQuery<Document[]>({
+    queryKey: ['docs-archived'],
+    queryFn:  () => documentsApi.list({ archived: 'true' }).then(r => r.data.data ?? []),
   });
 
   // ── Mutations ─────────────────────────────────────────────────────────────
@@ -109,7 +117,17 @@ export function DocsPage() {
 
   const removeMut = useMutation({
     mutationFn: (id: string) => documentsApi.remove(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['docs'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['docs'] }); qc.invalidateQueries({ queryKey: ['docs-archived'] }); },
+  });
+
+  const archiveMut = useMutation({
+    mutationFn: (id: string) => documentsApi.update(id, { isArchived: true } as any),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['docs'] }); qc.invalidateQueries({ queryKey: ['docs-archived'] }); },
+  });
+
+  const restoreDocMut = useMutation({
+    mutationFn: (id: string) => documentsApi.update(id, { isArchived: false } as any),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['docs'] }); qc.invalidateQueries({ queryKey: ['docs-archived'] }); },
   });
 
   const cloneMut = useMutation({
@@ -151,12 +169,12 @@ export function DocsPage() {
     updateSpaceMut.mutate({ id: editingSpaceId, name: editingSpaceName.trim(), icon: editingSpaceIcon });
   };
 
-  const allDocs = docs as Document[];
-  const filtered = allDocs
+  const allDocs   = isArchiveView ? (archivedDocs as Document[]) : (docs as Document[]);
+  const filtered  = allDocs
     .filter(d => !search || d.title.toLowerCase().includes(search.toLowerCase()))
     .filter(d => !filterType || d.type === filterType);
 
-  const recent       = [...allDocs].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 5);
+  const recent       = [...(docs as Document[])].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 5);
   const activeSpace  = (spaces as DocSpace[]).find(s => s.id === activeSpaceId);
   const canCreate    = !!activeProjectId; // still need a project to create
 
@@ -175,6 +193,16 @@ export function DocsPage() {
         >
           <span>📄</span><span style={{ flex: 1 }}>Todos os Documentos</span>
           <span style={{ fontSize: 11, color: 'var(--text3)' }}>{allDocs.length}</span>
+        </div>
+
+        {/* Archive */}
+        <div
+          className={`nav-item ${isArchiveView ? 'active' : ''}`}
+          onClick={() => setActiveSpaceId('__archive__')}
+          style={{ opacity: 0.75 }}
+        >
+          <span>📦</span><span style={{ flex: 1 }}>Arquivo</span>
+          {archivedDocs.length > 0 && <span style={{ fontSize: 11, color: 'var(--text3)' }}>{archivedDocs.length}</span>}
         </div>
 
         {/* Space list with inline edit */}
@@ -286,9 +314,14 @@ export function DocsPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg2)', flexShrink: 0, flexWrap: 'wrap' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-              {activeSpaceId === 'all' ? '📄 Documentação' : `${activeSpace?.icon ?? '📁'} ${activeSpace?.name}`}
+              {isArchiveView ? '📦 Arquivo de Documentos' : activeSpaceId === 'all' ? '📄 Documentação' : `${activeSpace?.icon ?? '📁'} ${activeSpace?.name}`}
             </h2>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{filtered.length} documento{filtered.length !== 1 ? 's' : ''} · todos os projetos</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+              {isArchiveView
+                ? `${filtered.length} documento${filtered.length !== 1 ? 's' : ''} arquivado${filtered.length !== 1 ? 's' : ''}`
+                : `${filtered.length} documento${filtered.length !== 1 ? 's' : ''} · todos os projetos`
+              }
+            </div>
           </div>
 
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -308,23 +341,37 @@ export function DocsPage() {
               <button onClick={() => setViewMode('list')} style={{ padding: '5px 10px', fontSize: 13, border: 'none', cursor: 'pointer', background: viewMode === 'list' ? 'var(--accent)' : 'var(--bg3)', color: viewMode === 'list' ? '#fff' : 'var(--text2)' }} title="Lista">☰</button>
               <button onClick={() => setViewMode('grid')} style={{ padding: '5px 10px', fontSize: 13, border: 'none', cursor: 'pointer', background: viewMode === 'grid' ? 'var(--accent)' : 'var(--bg3)', color: viewMode === 'grid' ? '#fff' : 'var(--text2)' }} title="Grade">⊞</button>
             </div>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => { if (!canCreate) { alert('Selecione um projeto para importar documentos.'); return; } setShowImport(true); setImportState('idle'); setImportMsg(''); }}
-              style={{ border: '1px solid var(--border)', opacity: canCreate ? 1 : 0.5 }}
-              title={canCreate ? 'Importar documento' : 'Selecione um projeto primeiro'}
-            >⬆ Importar</button>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => { if (!canCreate) { alert('Selecione um projeto para criar documentos.'); return; } setShowCreate(true); }}
-              title={canCreate ? 'Novo documento' : 'Selecione um projeto primeiro'}
-              style={{ opacity: canCreate ? 1 : 0.6 }}
-            >+ Novo Documento</button>
+            {!isArchiveView && (
+              <>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => { if (!canCreate) { alert('Selecione um projeto para importar documentos.'); return; } setShowImport(true); setImportState('idle'); setImportMsg(''); }}
+                  style={{ border: '1px solid var(--border)', opacity: canCreate ? 1 : 0.5 }}
+                  title={canCreate ? 'Importar documento' : 'Selecione um projeto primeiro'}
+                >⬆ Importar</button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => { if (!canCreate) { alert('Selecione um projeto para criar documentos.'); return; } setShowCreate(true); }}
+                  title={canCreate ? 'Novo documento' : 'Selecione um projeto primeiro'}
+                  style={{ opacity: canCreate ? 1 : 0.6 }}
+                >+ Novo Documento</button>
+              </>
+            )}
           </div>
         </div>
 
+        {/* Archive banner */}
+        {isArchiveView && (
+          <div style={{
+            background: 'rgba(251,191,36,.06)', borderBottom: '1px solid rgba(251,191,36,.2)',
+            padding: '8px 24px', fontSize: 12, color: 'var(--text3)',
+          }}>
+            📦 Documentos arquivados não aparecem na navegação normal. Use <strong>♻️ Restaurar</strong> para devolvê-los ou <strong>✕</strong> para excluir permanentemente.
+          </div>
+        )}
+
         {/* No project banner (soft, non-blocking) */}
-        {!canCreate && (
+        {!canCreate && !isArchiveView && (
           <div style={{
             background: 'rgba(99,102,241,.06)', borderBottom: '1px solid rgba(99,102,241,.15)',
             padding: '8px 24px', fontSize: 12, color: 'var(--text3)',
@@ -332,6 +379,7 @@ export function DocsPage() {
             💡 Você está vendo documentos de <strong>todos os projetos</strong>. Selecione um projeto no menu para criar ou importar novos documentos.
           </div>
         )}
+
 
         <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
 
@@ -429,17 +477,42 @@ export function DocsPage() {
                   <div style={{ fontSize: 11, color: 'var(--text3)' }}>{timeAgo(doc.updatedAt)}</div>
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                    <button
-                      onClick={e => { e.stopPropagation(); cloneMut.mutate(doc.id); }}
-                      title="Duplicar documento"
-                      style={{ color: 'var(--text3)', fontSize: 11, padding: '2px 7px', borderRadius: 4, background: 'var(--bg3)', border: '1px solid var(--border)', cursor: 'pointer', fontWeight: 600 }}
-                    >📋</button>
-                    <button
-                      onClick={e => { e.stopPropagation(); if (confirm(`Excluir "${doc.title}"?`)) removeMut.mutate(doc.id); }}
-                      style={{ color: 'var(--text3)', fontSize: 13, padding: '2px 6px', borderRadius: 4, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5 }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.5'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text3)'; }}
-                    >✕</button>
+                    {isArchiveView ? (
+                      <>
+                        <button
+                          onClick={e => { e.stopPropagation(); restoreDocMut.mutate(doc.id); }}
+                          title="Restaurar documento"
+                          style={{ color: 'var(--green)', fontSize: 11, padding: '2px 7px', borderRadius: 4, background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.3)', cursor: 'pointer', fontWeight: 600 }}
+                        >♻️</button>
+                        <button
+                          onClick={e => { e.stopPropagation(); if (confirm(`Excluir permanentemente "${doc.title}"? Esta ação não pode ser desfeita.`)) removeMut.mutate(doc.id); }}
+                          style={{ color: 'var(--text3)', fontSize: 13, padding: '2px 6px', borderRadius: 4, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5 }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.5'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text3)'; }}
+                        >✕</button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={e => { e.stopPropagation(); cloneMut.mutate(doc.id); }}
+                          title="Duplicar documento"
+                          style={{ color: 'var(--text3)', fontSize: 11, padding: '2px 7px', borderRadius: 4, background: 'var(--bg3)', border: '1px solid var(--border)', cursor: 'pointer', fontWeight: 600 }}
+                        >📋</button>
+                        <button
+                          onClick={e => { e.stopPropagation(); if (confirm(`Arquivar "${doc.title}"? Ele pode ser restaurado depois.`)) archiveMut.mutate(doc.id); }}
+                          title="Arquivar documento"
+                          style={{ color: 'var(--text3)', fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5 }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.5'; }}
+                        >📦</button>
+                        <button
+                          onClick={e => { e.stopPropagation(); if (confirm(`Excluir "${doc.title}"?`)) removeMut.mutate(doc.id); }}
+                          style={{ color: 'var(--text3)', fontSize: 13, padding: '2px 6px', borderRadius: 4, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5 }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.5'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text3)'; }}
+                        >✕</button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -457,19 +530,46 @@ export function DocsPage() {
                   onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.transform = ''; }}
                 >
                   <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4 }}>
-                    <button
-                      onClick={e => { e.stopPropagation(); cloneMut.mutate(doc.id); }}
-                      title="Duplicar"
-                      style={{ color: 'var(--text3)', fontSize: 11, padding: '2px 7px', borderRadius: 4, background: 'var(--bg4)', opacity: 0, transition: 'opacity .15s', border: '1px solid var(--border)', cursor: 'pointer', fontWeight: 600 }}
-                      onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
-                      onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = '0'}
-                    >📋</button>
-                    <button
-                      onClick={e => { e.stopPropagation(); if (confirm(`Excluir "${doc.title}"?`)) removeMut.mutate(doc.id); }}
-                      style={{ color: 'var(--text3)', fontSize: 13, padding: '2px 6px', borderRadius: 4, background: 'var(--bg4)', opacity: 0, transition: 'opacity .15s', border: 'none', cursor: 'pointer' }}
-                      onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
-                      onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = '0'}
-                    >✕</button>
+                    {isArchiveView ? (
+                      <>
+                        <button
+                          onClick={e => { e.stopPropagation(); restoreDocMut.mutate(doc.id); }}
+                          title="Restaurar"
+                          style={{ color: 'var(--green)', fontSize: 11, padding: '2px 7px', borderRadius: 4, background: 'rgba(34,197,94,.15)', opacity: 0, transition: 'opacity .15s', border: '1px solid rgba(34,197,94,.3)', cursor: 'pointer', fontWeight: 600 }}
+                          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
+                          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = '0'}
+                        >♻️</button>
+                        <button
+                          onClick={e => { e.stopPropagation(); if (confirm(`Excluir permanentemente "${doc.title}"?`)) removeMut.mutate(doc.id); }}
+                          style={{ color: 'var(--text3)', fontSize: 13, padding: '2px 6px', borderRadius: 4, background: 'var(--bg4)', opacity: 0, transition: 'opacity .15s', border: 'none', cursor: 'pointer' }}
+                          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
+                          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = '0'}
+                        >✕</button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={e => { e.stopPropagation(); cloneMut.mutate(doc.id); }}
+                          title="Duplicar"
+                          style={{ color: 'var(--text3)', fontSize: 11, padding: '2px 7px', borderRadius: 4, background: 'var(--bg4)', opacity: 0, transition: 'opacity .15s', border: '1px solid var(--border)', cursor: 'pointer', fontWeight: 600 }}
+                          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
+                          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = '0'}
+                        >📋</button>
+                        <button
+                          onClick={e => { e.stopPropagation(); if (confirm(`Arquivar "${doc.title}"?`)) archiveMut.mutate(doc.id); }}
+                          title="Arquivar"
+                          style={{ color: 'var(--text3)', fontSize: 13, padding: '2px 6px', borderRadius: 4, background: 'var(--bg4)', opacity: 0, transition: 'opacity .15s', border: 'none', cursor: 'pointer' }}
+                          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
+                          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = '0'}
+                        >📦</button>
+                        <button
+                          onClick={e => { e.stopPropagation(); if (confirm(`Excluir "${doc.title}"?`)) removeMut.mutate(doc.id); }}
+                          style={{ color: 'var(--text3)', fontSize: 13, padding: '2px 6px', borderRadius: 4, background: 'var(--bg4)', opacity: 0, transition: 'opacity .15s', border: 'none', cursor: 'pointer' }}
+                          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
+                          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = '0'}
+                        >✕</button>
+                      </>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
                     <span style={{ fontSize: 26 }}>{DOC_ICON[doc.type] ?? '📄'}</span>

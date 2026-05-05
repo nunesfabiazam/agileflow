@@ -105,6 +105,7 @@ export interface Task {
   storyPoints?: number;
   dueDate?: string;
   isClosed: boolean;
+  isArchived: boolean;
   order: number;
   createdAt: string;
   updatedAt: string;
@@ -140,6 +141,7 @@ export interface Document {
   version: number;
   coverIdx?: number | null;
   docEmoji?: string | null;
+  isArchived?: boolean;
   createdAt: string;
   updatedAt: string;
   space?: Pick<DocSpace, 'id' | 'name'>;

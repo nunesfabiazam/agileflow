@@ -78,12 +78,13 @@ router.delete('/spaces/:id', async (req: AuthRequest, res: Response) => {
 // ── Documents ─────────────────────────────────────────────────────────────────
 // GET all docs — projectId is optional (global view by default)
 router.get('/', async (req: AuthRequest, res: Response) => {
-  const { projectId, spaceId, search } = req.query as Record<string, string>;
+  const { projectId, spaceId, search, archived } = req.query as Record<string, string>;
   const docs = await prisma.document.findMany({
     where: {
       ...(projectId && { projectId }),
       ...(spaceId   && { spaceId }),
       ...(search    && { title: { contains: search, mode: 'insensitive' } }),
+      isArchived: archived === 'true',
     },
     orderBy: { updatedAt: 'desc' },
     include: {
@@ -131,15 +132,16 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 });
 
 router.patch('/:id', async (req: AuthRequest, res: Response) => {
-  const { title, content, type, spaceId, status, coverIdx, docEmoji, taskIds } = req.body;
+  const { title, content, type, spaceId, status, coverIdx, docEmoji, taskIds, isArchived } = req.body;
   const doc = await prisma.document.update({
     where: { id: req.params.id },
     data: {
-      ...(title    !== undefined && { title }),
-      ...(content  !== undefined && { content }),
-      ...(type     !== undefined && { type }),
-      ...(spaceId  !== undefined && { spaceId }),
-      ...(status   !== undefined && { status }),
+      ...(title      !== undefined && { title }),
+      ...(content    !== undefined && { content }),
+      ...(type       !== undefined && { type }),
+      ...(spaceId    !== undefined && { spaceId }),
+      ...(status     !== undefined && { status }),
+      ...(isArchived !== undefined && { isArchived }),
       // coverIdx can be null (remove cover) or a number
       ...(coverIdx !== undefined && { coverIdx: coverIdx === null ? null : Number(coverIdx) }),
       ...(docEmoji !== undefined && { docEmoji }),

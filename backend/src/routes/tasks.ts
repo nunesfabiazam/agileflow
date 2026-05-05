@@ -29,7 +29,7 @@ const TaskSchema = z.object({
 const taskSelect = {
   id: true, taskKey: true, title: true, description: true,
   type: true, priority: true, storyPoints: true, dueDate: true,
-  isClosed: true, order: true, createdAt: true, updatedAt: true,
+  isClosed: true, isArchived: true, order: true, createdAt: true, updatedAt: true,
   column: { select: { id: true, name: true, color: true } },
   sprint: { select: { id: true, name: true } },
   epic:   { select: { id: true, title: true, color: true } },
@@ -41,15 +41,17 @@ const taskSelect = {
 
 // GET /api/tasks?projectId=&sprintId=&columnId=&type=&priority=
 router.get('/', async (req: AuthRequest, res: Response) => {
-  const { projectId, sprintId, columnId, type, priority, epicId, search, page = '1', limit = '500' } = req.query as Record<string, string>;
+  const { projectId, sprintId, columnId, type, priority, epicId, search, archived, page = '1', limit = '500' } = req.query as Record<string, string>;
   const where: Record<string, unknown> = {};
-  if (projectId)  where.projectId = projectId;
-  if (sprintId)   where.sprintId  = sprintId === 'null' ? null : sprintId;
-  if (columnId)   where.columnId  = columnId;
-  if (type)       where.type      = type;
-  if (priority)   where.priority  = priority;
-  if (epicId)     where.epicId    = epicId;
-  if (search)     where.title     = { contains: search, mode: 'insensitive' };
+  if (projectId)  where.projectId  = projectId;
+  if (sprintId)   where.sprintId   = sprintId === 'null' ? null : sprintId;
+  if (columnId)   where.columnId   = columnId;
+  if (type)       where.type       = type;
+  if (priority)   where.priority   = priority;
+  if (epicId)     where.epicId     = epicId;
+  if (search)     where.title      = { contains: search, mode: 'insensitive' };
+  // By default show only non-archived; pass archived=true to show archive
+  where.isArchived = archived === 'true';
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
   const [tasks, total] = await Promise.all([
@@ -131,7 +133,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 router.patch('/bulk', async (req: AuthRequest, res: Response) => {
   const { ids, data } = req.body as {
     ids: string[];
-    data: { sprintId?: string | null; priority?: string; type?: string; epicId?: string | null; columnId?: string | null };
+    data: { sprintId?: string | null; priority?: string; type?: string; epicId?: string | null; columnId?: string | null; isArchived?: boolean };
   };
   if (!ids || !Array.isArray(ids) || ids.length === 0) {
     res.status(400).json({ success: false, error: 'ids obrigatório.' });
@@ -142,6 +144,21 @@ router.patch('/bulk', async (req: AuthRequest, res: Response) => {
     res.json({ success: true, updated: ids.length });
   } catch {
     res.status(500).json({ success: false, error: 'Erro interno.' });
+  }
+});
+
+// DELETE /api/tasks/bulk — delete multiple tasks at once
+router.delete('/bulk', async (req: AuthRequest, res: Response) => {
+  const { ids } = req.body as { ids: string[] };
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ success: false, error: 'ids obrigatório.' });
+    return;
+  }
+  try {
+    await prisma.task.deleteMany({ where: { id: { in: ids } } });
+    res.json({ success: true, deleted: ids.length });
+  } catch {
+    res.status(500).json({ success: false, error: 'Erro ao excluir tasks.' });
   }
 });
 

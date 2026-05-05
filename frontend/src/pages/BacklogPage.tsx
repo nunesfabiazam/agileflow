@@ -20,6 +20,7 @@ export function BacklogPage() {
   const activeProjectId = useAppStore(s => s.activeProjectId);
   const qc = useQueryClient();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [viewMode, setViewMode] = useState<'backlog' | 'archive'>('backlog');
 
   // ── Filters ─────────────────────────────────────────────────────────────────
   const [filterSearch,   setFilterSearch]   = useState('');
@@ -38,7 +39,6 @@ export function BacklogPage() {
 
   // ── Bulk selection ──────────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  // bulk fields declared below with the mutation
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
@@ -82,6 +82,17 @@ export function BacklogPage() {
     enabled: !!activeProjectId,
   });
 
+  const { data: archivedTasks = [] } = useQuery<Task[]>({
+    queryKey: ['tasks-archived', activeProjectId],
+    queryFn: () => tasksApi.list({ projectId: activeProjectId!, limit: '500', archived: 'true' }).then(r => r.data.data ?? []),
+    enabled: !!activeProjectId && viewMode === 'archive',
+  });
+
+  const invalidateTasks = () => {
+    qc.invalidateQueries({ queryKey: ['tasks', activeProjectId] });
+    qc.invalidateQueries({ queryKey: ['tasks-archived', activeProjectId] });
+  };
+
   const createSprintMut = useMutation({
     mutationFn: () => sprintsApi.create({
       name:      newSprint.name.trim(),
@@ -106,7 +117,7 @@ export function BacklogPage() {
     mutationFn: (id: string) => sprintsApi.complete(id, moveToSprintId || undefined),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sprints', activeProjectId] });
-      qc.invalidateQueries({ queryKey: ['tasks', activeProjectId] });
+      invalidateTasks();
       setShowComplete(null);
       setMoveToSprintId('');
     },
@@ -116,11 +127,11 @@ export function BacklogPage() {
     mutationFn: sprintsApi.remove,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sprints', activeProjectId] });
-      qc.invalidateQueries({ queryKey: ['tasks', activeProjectId] });
+      invalidateTasks();
     },
   });
 
-  // ── Single task move — optimistic update (sem delay) ───────────────────────
+  // ── Single task move — optimistic update ───────────────────────────────────
   const moveTaskMut = useMutation({
     mutationFn: ({ taskId, sprintId }: { taskId: string; sprintId: string | null }) =>
       tasksApi.update(taskId, { sprintId } as any),
@@ -140,7 +151,7 @@ export function BacklogPage() {
     onError: (_err, _vars, ctx: any) => {
       ctx?.prev?.forEach(([key, data]: [any, any]) => qc.setQueryData(key, data));
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ['tasks', activeProjectId] }),
+    onSettled: () => invalidateTasks(),
   });
 
   // ── Bulk fields state ───────────────────────────────────────────────────────
@@ -162,10 +173,25 @@ export function BacklogPage() {
     mutationFn: ({ ids, data }: { ids: string[]; data: Record<string, any> }) =>
       tasksApi.bulkUpdate(ids, data),
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: ['tasks', activeProjectId] });
+      invalidateTasks();
       clearSelection();
       clearBulk();
     },
+  });
+
+  const bulkArchiveMut = useMutation({
+    mutationFn: (ids: string[]) => tasksApi.bulkUpdate(ids, { isArchived: true }),
+    onSettled: () => { invalidateTasks(); clearSelection(); },
+  });
+
+  const bulkRestoreMut = useMutation({
+    mutationFn: (ids: string[]) => tasksApi.bulkUpdate(ids, { isArchived: false }),
+    onSettled: () => { invalidateTasks(); clearSelection(); },
+  });
+
+  const bulkDeleteMut = useMutation({
+    mutationFn: (ids: string[]) => tasksApi.bulkDelete(ids),
+    onSettled: () => { invalidateTasks(); clearSelection(); },
   });
 
   // ── Derived filter options ──────────────────────────────────────────────────
@@ -182,7 +208,7 @@ export function BacklogPage() {
   }, [tasks]);
 
   const statusOptions = useMemo(() => {
-    const seen = new Map<string, string>(); // columnId → name
+    const seen = new Map<string, string>();
     tasks.forEach(t => { if (t.column) seen.set(t.column.name, t.column.name); });
     return [...seen.keys()].sort();
   }, [tasks]);
@@ -196,7 +222,7 @@ export function BacklogPage() {
     if (filterAssignee && !t.assignees?.some(a => a.user.id === filterAssignee)) return false;
     if (filterStatus   && t.column?.name !== filterStatus) return false;
     return true;
-  }), [tasks, filterSearch, filterType, filterPriority, filterEpic, filterAssignee]);
+  }), [tasks, filterSearch, filterType, filterPriority, filterEpic, filterAssignee, filterStatus]);
 
   if (!activeProjectId) {
     return <div className="empty-state"><div className="empty-icon">📋</div><div className="empty-text">Selecione um projeto para ver o backlog.</div></div>;
@@ -209,18 +235,90 @@ export function BacklogPage() {
   const targetSprints   = [...activeSprints, ...planningSprints];
 
   const completingSprint      = showComplete ? (sprints as Sprint[]).find(s => s.id === showComplete) : null;
-  const completingSprintTasks = showComplete ? tasks.filter(t => t.sprint?.id === showComplete) : []; // usa tasks não-filtrado para não perder tasks incompletas
+  const completingSprintTasks = showComplete ? tasks.filter(t => t.sprint?.id === showComplete) : [];
   const incompleteTasks       = completingSprintTasks.filter(t => !t.column?.isDefault);
   const otherSprints          = (sprints as Sprint[]).filter(s => s.id !== showComplete && s.status !== 'COMPLETED');
 
   const backlogIds = backlogTasks.map(t => t.id);
-  const selectedCount = [...selectedIds].filter(id => backlogIds.includes(id)).length;
+  const selectedCount = [...selectedIds].filter(id =>
+    (viewMode === 'archive' ? archivedTasks : backlogTasks).some(t => t.id === id)
+  ).length;
 
+  // ── Archive view ────────────────────────────────────────────────────────────
+  if (viewMode === 'archive') {
+    const archiveIds = archivedTasks.map(t => t.id);
+    return (
+      <div>
+        <div className="page-header">
+          <h2>📦 Arquivo de Tasks</h2>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setViewMode('backlog'); clearSelection(); }}>← Voltar ao Backlog</button>
+          </div>
+        </div>
+
+        <p style={{ color: 'var(--text3)', fontSize: 13, marginBottom: 20 }}>
+          Tasks arquivadas não aparecem no backlog nem no kanban. Você pode restaurá-las ou excluí-las permanentemente.
+        </p>
+
+        {/* Bulk bar for archive */}
+        {selectedCount > 0 && (
+          <div style={{
+            background: 'rgba(99,102,241,.08)', border: '1px solid var(--accent)',
+            borderRadius: 10, padding: '12px 16px', marginBottom: 16,
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>
+              {selectedCount} {selectedCount === 1 ? 'item selecionado' : 'itens selecionados'}
+            </span>
+            <div style={{ flex: 1 }} />
+            <button className="btn btn-ghost btn-sm" onClick={clearSelection}>✕ Cancelar</button>
+            <button
+              className="btn btn-sm"
+              style={{ background: 'rgba(34,197,94,.12)', color: 'var(--green)', border: '1px solid rgba(34,197,94,.3)' }}
+              disabled={bulkRestoreMut.isPending}
+              onClick={() => { if (confirm(`Restaurar ${selectedCount} task(s) para o backlog?`)) bulkRestoreMut.mutate([...selectedIds].filter(id => archiveIds.includes(id))); }}
+            >
+              ♻️ Restaurar
+            </button>
+            <button
+              className="btn btn-sm"
+              style={{ background: 'rgba(239,68,68,.12)', color: 'var(--red)', border: '1px solid rgba(239,68,68,.3)' }}
+              disabled={bulkDeleteMut.isPending}
+              onClick={() => { if (confirm(`Excluir permanentemente ${selectedCount} task(s)? Esta ação não pode ser desfeita.`)) bulkDeleteMut.mutate([...selectedIds].filter(id => archiveIds.includes(id))); }}
+            >
+              🗑 Excluir
+            </button>
+          </div>
+        )}
+
+        {archivedTasks.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">📦</div>
+            <div className="empty-text">Nenhuma task arquivada.</div>
+          </div>
+        ) : (
+          <TaskTable
+            tasks={archivedTasks}
+            onSelect={setSelectedTask}
+            showMoveToSprint={false}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onToggleAll={() => toggleAll(archiveIds)}
+          />
+        )}
+
+        {selectedTask && <TaskDetailModal task={selectedTask} projectId={activeProjectId} onClose={() => setSelectedTask(null)} />}
+      </div>
+    );
+  }
+
+  // ── Normal backlog view ─────────────────────────────────────────────────────
   return (
     <div>
       <div className="page-header">
         <h2>📋 Backlog do Produto</h2>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => { setViewMode('archive'); clearSelection(); }}>📦 Arquivo</button>
           <button className="btn btn-primary btn-sm" onClick={() => setShowNewSprint(true)}>+ Nova Sprint</button>
         </div>
       </div>
@@ -243,32 +341,23 @@ export function BacklogPage() {
         </div>
 
         {/* Type */}
-        <select
-          value={filterType}
-          onChange={e => setFilterType(e.target.value)}
-          style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterType ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer' }}
-        >
+        <select value={filterType} onChange={e => setFilterType(e.target.value)}
+          style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterType ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer' }}>
           <option value="">Tipo</option>
           {TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
         </select>
 
         {/* Priority */}
-        <select
-          value={filterPriority}
-          onChange={e => setFilterPriority(e.target.value)}
-          style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterPriority ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer' }}
-        >
+        <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)}
+          style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterPriority ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer' }}>
           <option value="">Prioridade</option>
           {PRIORITIES.map(p => <option key={p} value={p}>{PRIO_LABEL[p]}</option>)}
         </select>
 
         {/* Epic */}
         {epicOptions.length > 0 && (
-          <select
-            value={filterEpic}
-            onChange={e => setFilterEpic(e.target.value)}
-            style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterEpic ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', maxWidth: 160 }}
-          >
+          <select value={filterEpic} onChange={e => setFilterEpic(e.target.value)}
+            style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterEpic ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', maxWidth: 160 }}>
             <option value="">Épico</option>
             {epicOptions.map(([id, title]) => <option key={id} value={id}>{title}</option>)}
           </select>
@@ -276,23 +365,17 @@ export function BacklogPage() {
 
         {/* Assignee */}
         {assigneeOptions.length > 0 && (
-          <select
-            value={filterAssignee}
-            onChange={e => setFilterAssignee(e.target.value)}
-            style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterAssignee ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', maxWidth: 160 }}
-          >
+          <select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}
+            style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterAssignee ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', maxWidth: 160 }}>
             <option value="">Responsável</option>
             {assigneeOptions.map(([id, u]) => <option key={id} value={id}>{u.name}</option>)}
           </select>
         )}
 
-        {/* Status (Kanban column) */}
+        {/* Status */}
         {statusOptions.length > 0 && (
-          <select
-            value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-            style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterStatus ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', maxWidth: 160 }}
-          >
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+            style={{ fontSize: 12, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: filterStatus ? 'rgba(99,102,241,.15)' : 'var(--bg3)', color: 'var(--text2)', padding: '0 8px', cursor: 'pointer', maxWidth: 160 }}>
             <option value="">Status</option>
             {statusOptions.map(name => <option key={name} value={name}>{name}</option>)}
           </select>
@@ -305,10 +388,10 @@ export function BacklogPage() {
               <span style={{ fontSize: 12, color: 'var(--text3)' }}>
                 {filteredTasks.length} de {tasks.length} item{tasks.length !== 1 ? 's' : ''}
               </span>
-              <button
-                onClick={clearFilters}
-                style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text3)', cursor: 'pointer' }}
-              >✕ Limpar filtros</button>
+              <button onClick={clearFilters}
+                style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text3)', cursor: 'pointer' }}>
+                ✕ Limpar filtros
+              </button>
             </>
           )}
           {!hasFilter && (
@@ -394,8 +477,7 @@ export function BacklogPage() {
 
             {/* Field selectors */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-
-              {/* Status (column) */}
+              {/* Status */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Status</span>
                 <select value={bulkColumnId} onChange={e => setBulkColumnId(e.target.value)}
@@ -448,7 +530,7 @@ export function BacklogPage() {
               </div>
             </div>
 
-            {/* Apply button */}
+            {/* Apply button + archive/delete actions */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {!hasBulkChange && <span style={{ fontSize: 12, color: 'var(--text3)' }}>Selecione ao menos um campo para alterar.</span>}
               {hasBulkChange && (
@@ -457,6 +539,27 @@ export function BacklogPage() {
                 </span>
               )}
               <div style={{ flex: 1 }} />
+
+              {/* Archive */}
+              <button
+                className="btn btn-sm"
+                style={{ background: 'rgba(251,191,36,.1)', color: 'var(--yellow)', border: '1px solid rgba(251,191,36,.3)' }}
+                disabled={bulkArchiveMut.isPending}
+                onClick={() => { if (confirm(`Arquivar ${selectedCount} task(s)? Elas poderão ser restauradas na seção Arquivo.`)) bulkArchiveMut.mutate([...selectedIds].filter(id => backlogIds.includes(id))); }}
+              >
+                📦 Arquivar
+              </button>
+
+              {/* Delete */}
+              <button
+                className="btn btn-sm"
+                style={{ background: 'rgba(239,68,68,.1)', color: 'var(--red)', border: '1px solid rgba(239,68,68,.3)' }}
+                disabled={bulkDeleteMut.isPending}
+                onClick={() => { if (confirm(`Excluir permanentemente ${selectedCount} task(s)? Esta ação não pode ser desfeita.`)) bulkDeleteMut.mutate([...selectedIds].filter(id => backlogIds.includes(id))); }}
+              >
+                🗑 Excluir
+              </button>
+
               {hasBulkChange && (
                 <button className="btn btn-ghost btn-sm" onClick={clearBulk}>↩ Limpar campos</button>
               )}
@@ -578,7 +681,7 @@ export function BacklogPage() {
   );
 }
 
-// ── Memoized row — só re-renderiza quando os seus próprios dados mudam ────────
+// ── Memoized row ───────────────────────────────────────────────────────────────
 const TaskRow = memo(function TaskRow({
   task, onSelect, isSelected, onToggleSelect, showMoveToSprint, sprints, onMoveToSprint,
 }: {
@@ -591,18 +694,11 @@ const TaskRow = memo(function TaskRow({
   onMoveToSprint?: (taskId: string, sprintId: string | null) => void;
 }) {
   return (
-    <tr
-      className="backlog-row"
-      style={{ background: isSelected ? 'rgba(99,102,241,.08)' : undefined }}
-    >
+    <tr className="backlog-row" style={{ background: isSelected ? 'rgba(99,102,241,.08)' : undefined }}>
       {onToggleSelect && (
         <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={() => onToggleSelect(task.id)}
-            style={{ cursor: 'pointer', accentColor: 'var(--accent)', width: 15, height: 15 }}
-          />
+          <input type="checkbox" checked={isSelected} onChange={() => onToggleSelect(task.id)}
+            style={{ cursor: 'pointer', accentColor: 'var(--accent)', width: 15, height: 15 }} />
         </td>
       )}
       <td onClick={() => onSelect(task)}><code style={{ fontSize: 11, color: 'var(--text3)' }}>{task.taskKey}</code></td>
@@ -625,12 +721,9 @@ const TaskRow = memo(function TaskRow({
       </td>
       {showMoveToSprint && (
         <td>
-          <select
-            value={task.sprint?.id ?? ''}
-            onChange={e => onMoveToSprint?.(task.id, e.target.value || null)}
+          <select value={task.sprint?.id ?? ''} onChange={e => onMoveToSprint?.(task.id, e.target.value || null)}
             onClick={e => e.stopPropagation()}
-            style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text2)', cursor: 'pointer', maxWidth: 140 }}
-          >
+            style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text2)', cursor: 'pointer', maxWidth: 140 }}>
             <option value="">— Backlog</option>
             {(sprints ?? []).map(s => (
               <option key={s.id} value={s.id}>{s.status === 'ACTIVE' ? '🟢 ' : '📅 '}{s.name}</option>
@@ -665,13 +758,9 @@ function TaskTable({
       <thead><tr>
         {selectable && (
           <th style={{ width: 36, textAlign: 'center' }}>
-            <input
-              type="checkbox"
-              checked={allSelected}
+            <input type="checkbox" checked={allSelected}
               ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
-              onChange={onToggleAll}
-              style={{ cursor: 'pointer', accentColor: 'var(--accent)' }}
-            />
+              onChange={onToggleAll} style={{ cursor: 'pointer', accentColor: 'var(--accent)' }} />
           </th>
         )}
         <th>ID</th><th>Tipo</th><th>Título</th><th>Épico</th><th>Prioridade</th><th>Status</th><th>Pts</th><th>Responsáveis</th>
@@ -679,15 +768,10 @@ function TaskTable({
       </tr></thead>
       <tbody>
         {tasks.map(t => (
-          <TaskRow
-            key={t.id}
-            task={t}
-            onSelect={onSelect}
+          <TaskRow key={t.id} task={t} onSelect={onSelect}
             isSelected={selectable ? selectedIds!.has(t.id) : false}
             onToggleSelect={selectable ? onToggleSelect : undefined}
-            showMoveToSprint={showMoveToSprint}
-            sprints={sprints}
-            onMoveToSprint={onMoveToSprint}
+            showMoveToSprint={showMoveToSprint} sprints={sprints} onMoveToSprint={onMoveToSprint}
           />
         ))}
       </tbody>

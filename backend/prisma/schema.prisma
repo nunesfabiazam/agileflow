@@ -219,6 +219,7 @@ model Task {
   dueDate       DateTime?
   order         Int           @default(0) // position within column
   isClosed      Boolean       @default(false)
+  isArchived    Boolean       @default(false)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -348,9 +349,10 @@ model Document {
   type      DocType   @default(OTHER)
   status    DocStatus @default(DRAFT)
   version   Int       @default(1)
-  coverIdx  Int?                      // index into COVER_GRADIENTS array (null = no cover)
-  docEmoji  String?                   // emoji icon for the document
-  createdAt DateTime  @default(now())
+  coverIdx   Int?                      // index into COVER_GRADIENTS array (null = no cover)
+  docEmoji   String?                   // emoji icon for the document
+  isArchived Boolean   @default(false)
+  createdAt  DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
   projectId String
