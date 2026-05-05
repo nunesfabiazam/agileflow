@@ -151,12 +151,7 @@ function mapJiraPriority(p: string): 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' {
   return map[n] ?? 'MEDIUM';
 }
 
-function parseJiraCsv(
-  rows: Record<string, string>[],
-  projectId: string,
-  creatorId: string,
-  columnMap: Record<string, string>,
-) {
+function parseJiraCsvRows(rows: Record<string, string>[], columnMap: Record<string, string>) {
   return rows.map(row => ({
     title:       getField(row, 'Resumo', 'Summary', 'summary', 'título', 'Título').substring(0, 500),
     description: getField(row, 'Descrição', 'Description', 'description') || null,
@@ -165,8 +160,10 @@ function parseJiraCsv(
     storyPoints: parseInt(getField(row, 'Campo personalizado (Pontos de História)', 'Campo personalizado (${field_Story_Points})', 'Story Points', 'story_points', 'Pontos')) || null,
     columnId:    findColumnId(columnMap, getField(row, 'Situação', 'Status', 'status')),
     issueKey:    getField(row, 'Chave do item', 'Issue key', 'Issue Key', 'issue_key'),
-    projectId,
-    creatorId,
+    // Epic: key from "Épico Link" / "Epic Link" OR title from "Épico" / "Epic Name"
+    epicLink:    getField(row, 'Épico Link', 'Epic Link', 'epic_link', 'epicLink', 'Épico', 'Epic Name', 'Epic'),
+    // Assignee: Jira username from "Responsável" / "Assignee"
+    assigneeRaw: getField(row, 'Responsável', 'Assignee', 'assignee', 'responsável'),
   }));
 }
 
@@ -242,44 +239,125 @@ router.post('/jira-csv', upload.single('file'), async (req: AuthRequest, res: Re
     if (rows.length === 0) {
       res.json({ success: true, message: 'Arquivo vazio.', data: { created: 0, skipped: 0 } }); return;
     }
-    console.log('[import/jira-csv] Colunas:', Object.keys(rows[0] ?? {}).slice(0, 8));
 
-    const cols = await prisma.kanbanColumn.findMany({ where: { projectId } });
+    const detectedCols = Object.keys(rows[0] ?? {});
+    console.log('[import/jira-csv] Colunas detectadas:', detectedCols);
+
+    const [cols, project, allUsers] = await Promise.all([
+      prisma.kanbanColumn.findMany({ where: { projectId } }),
+      prisma.project.findUnique({ where: { id: projectId } }),
+      prisma.user.findMany({ select: { id: true, email: true, name: true } }),
+    ]);
+    if (!project) { res.status(404).json({ success: false, error: 'Projeto não encontrado.' }); return; }
+
     const colMap: Record<string, string> = {};
     cols.forEach(c => { colMap[norm(c.name)] = c.id; });
 
-    const project = await prisma.project.findUnique({ where: { id: projectId } });
-    if (!project) { res.status(404).json({ success: false, error: 'Projeto não encontrado.' }); return; }
+    // Helper: match Jira username/display-name to a user in the system
+    function findUserId(raw: string): string | null {
+      if (!raw) return null;
+      const n = raw.toLowerCase().trim();
+      // try email prefix match (e.g. "fabio.morimoto" → "fabio.morimoto@fgv.br")
+      const byEmail = allUsers.find(u => u.email.toLowerCase().startsWith(n) || u.email.toLowerCase().split('@')[0] === n);
+      if (byEmail) return byEmail.id;
+      // try name match (normalized)
+      const byName = allUsers.find(u => norm(u.name).includes(n) || n.includes(norm(u.name)));
+      return byName?.id ?? null;
+    }
 
+    const parsed = parseJiraCsvRows(rows, colMap);
     const taskCount = await prisma.task.count({ where: { projectId } });
-    const tasks = parseJiraCsv(rows, projectId, req.user!.userId, colMap);
 
+    // ── PASS 1: create Epics (rows where type === EPIC) ──────────────────────
+    // epicKey (issueKey or title) → AgileFlow epicId
+    const epicKeyMap: Record<string, string> = {};
+    const epicTitleMap: Record<string, string> = {};
+
+    for (const t of parsed) {
+      if (t.type !== 'EPIC' || !t.title) continue;
+      // Check if epic already exists by title in this project
+      const existing = await prisma.epic.findFirst({ where: { projectId, title: t.title } });
+      if (existing) {
+        if (t.issueKey) epicKeyMap[t.issueKey] = existing.id;
+        epicTitleMap[norm(t.title)] = existing.id;
+        continue;
+      }
+      const epic = await prisma.epic.create({
+        data: { title: t.title, description: t.description, projectId, creatorId: req.user!.userId },
+      });
+      if (t.issueKey) epicKeyMap[t.issueKey] = epic.id;
+      epicTitleMap[norm(t.title)] = epic.id;
+    }
+
+    // ── PASS 2: create Tasks (skip rows that are pure Epics) ─────────────────
     let created = 0, skipped = 0;
-    for (const [i, t] of tasks.entries()) {
+
+    for (const [i, t] of parsed.entries()) {
       if (!t.title) { skipped++; continue; }
+
+      // Resolve epicId: try issueKey match first, then title match
+      let epicId: string | null = null;
+      if (t.epicLink) {
+        const linkNorm = t.epicLink.trim();
+        epicId = epicKeyMap[linkNorm]            // exact key match (e.g. PROJ-5)
+          ?? epicTitleMap[norm(linkNorm)]        // title match
+          ?? null;
+        // If not found yet, try creating the epic on the fly from the link string
+        if (!epicId && linkNorm) {
+          const existing = await prisma.epic.findFirst({ where: { projectId, title: linkNorm } });
+          if (existing) {
+            epicId = existing.id;
+          } else {
+            const newEpic = await prisma.epic.create({
+              data: { title: linkNorm, projectId, creatorId: req.user!.userId },
+            });
+            epicId = newEpic.id;
+            epicTitleMap[norm(linkNorm)] = epicId;
+          }
+        }
+      }
+
+      // Skip if already imported
       if (t.issueKey) {
         const exists = await prisma.task.findFirst({ where: { taskKey: t.issueKey, projectId } });
         if (exists) { skipped++; continue; }
       }
-      await prisma.task.create({
+
+      // Resolve assignee
+      const assigneeId = findUserId(t.assigneeRaw);
+
+      const task = await prisma.task.create({
         data: {
           taskKey:     t.issueKey || `${project.key}-${taskCount + created + 1}`,
           title:       t.title,
           description: t.description,
-          type:        t.type,
+          type:        t.type === 'EPIC' ? 'TASK' : t.type, // epics already created above
           priority:    t.priority,
           storyPoints: t.storyPoints,
           columnId:    t.columnId,
+          epicId:      epicId,
           projectId,
           creatorId:   req.user!.userId,
+          ...(assigneeId ? {
+            assignees: { create: [{ userId: assigneeId }] },
+          } : {}),
         },
       });
       created++;
+      void task;
     }
+
     fs.unlinkSync(req.file.path);
-    res.json({ success: true, message: `Importação concluída: ${created} tasks criadas, ${skipped} ignoradas.`, data: { created, skipped } });
+
+    const epicsCreated = Object.keys(epicKeyMap).length + Object.keys(epicTitleMap).length;
+    res.json({
+      success: true,
+      message: `Importação concluída: ${created} tasks e ${Object.keys(epicTitleMap).length} épicos criados, ${skipped} ignorados.`,
+      data: { created, skipped, epicsCreated: Object.keys(epicTitleMap).length },
+    });
   } catch (err) {
     if (req.file?.path) try { fs.unlinkSync(req.file.path); } catch {}
+    console.error('[import/jira-csv]', err);
     res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Erro ao processar CSV.' });
   }
 });
