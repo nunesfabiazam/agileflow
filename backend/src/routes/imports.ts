@@ -402,6 +402,171 @@ router.post('/jira-json', upload.single('file'), async (req: AuthRequest, res: R
   }
 });
 
+// ── Jira XML parser ───────────────────────────────────────────────────────────
+
+function xmlText(xml: string, tag: string): string {
+  // Matches <tag ...>content</tag> or <tag ...><![CDATA[content]]></tag>
+  const re = new RegExp(`<${tag}(?:[^>]*)>([\\s\\S]*?)<\\/${tag}>`, 'i');
+  const m = xml.match(re);
+  if (!m) return '';
+  const raw = m[1].trim();
+  // unwrap CDATA
+  const cdata = raw.match(/^<!\[CDATA\[([\s\S]*?)]]>$/);
+  return (cdata ? cdata[1] : raw).trim();
+}
+
+function xmlAttr(xml: string, tag: string, attr: string): string {
+  const re = new RegExp(`<${tag}[^>]*\\s${attr}="([^"]*)"`, 'i');
+  return xml.match(re)?.[1]?.trim() ?? '';
+}
+
+function xmlCustomField(xml: string, nameFragment: string): string {
+  // Find customfield block where customfieldname contains nameFragment
+  const blocks = [...xml.matchAll(/<customfield[\s\S]*?<\/customfield>/gi)];
+  for (const b of blocks) {
+    const block = b[0];
+    const name = xmlText(block, 'customfieldname');
+    if (norm(name).includes(norm(nameFragment))) {
+      return xmlText(block, 'customfieldvalue');
+    }
+  }
+  return '';
+}
+
+function parseJiraXml(xmlContent: string) {
+  // Extract all <item> blocks
+  const items: string[] = [];
+  const re = /<item>([\s\S]*?)<\/item>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xmlContent)) !== null) items.push(m[1]);
+
+  return items.map(item => ({
+    issueKey:    xmlText(item, 'key'),
+    title:       xmlText(item, 'summary').substring(0, 500),
+    description: xmlText(item, 'description') || null,
+    type:        xmlText(item, 'type'),
+    priority:    xmlText(item, 'priority'),
+    status:      xmlText(item, 'status'),
+    assigneeRaw: xmlText(item, 'assignee') || xmlAttr(item, 'assignee', 'username') || xmlAttr(item, 'assignee', 'accountid'),
+    epicLink:    xmlCustomField(item, 'Epic Link') || xmlCustomField(item, 'Épico Link') || xmlCustomField(item, 'epic link'),
+    storyPoints: parseInt(xmlCustomField(item, 'Story Points') || xmlCustomField(item, 'Pontos de História') || '0') || null,
+  }));
+}
+
+// POST /api/import/jira-xml
+router.post('/jira-xml', upload.single('file'), async (req: AuthRequest, res: Response) => {
+  if (!req.file) { res.status(400).json({ success: false, error: 'Nenhum arquivo enviado.' }); return; }
+  const { projectId } = req.body;
+  if (!projectId) { res.status(400).json({ success: false, error: 'projectId é obrigatório.' }); return; }
+  try {
+    const xmlContent = fs.readFileSync(req.file.path, 'utf-8');
+    const parsed = parseJiraXml(xmlContent);
+
+    if (parsed.length === 0) {
+      res.json({ success: true, message: 'Nenhuma issue encontrada no XML.', data: { created: 0, skipped: 0 } }); return;
+    }
+    console.log(`[import/jira-xml] ${parsed.length} issues encontradas`);
+
+    const [cols, project, allUsers] = await Promise.all([
+      prisma.kanbanColumn.findMany({ where: { projectId } }),
+      prisma.project.findUnique({ where: { id: projectId } }),
+      prisma.user.findMany({ select: { id: true, email: true, name: true } }),
+    ]);
+    if (!project) { res.status(404).json({ success: false, error: 'Projeto não encontrado.' }); return; }
+
+    const colMap: Record<string, string> = {};
+    cols.forEach(c => { colMap[norm(c.name)] = c.id; });
+
+    function findUserId(raw: string): string | null {
+      if (!raw) return null;
+      const n = raw.toLowerCase().trim();
+      const byEmail = allUsers.find(u => u.email.toLowerCase().split('@')[0] === n || u.email.toLowerCase().startsWith(n));
+      if (byEmail) return byEmail.id;
+      const byName = allUsers.find(u => norm(u.name).includes(n) || n.includes(norm(u.name)));
+      return byName?.id ?? null;
+    }
+
+    const taskCount = await prisma.task.count({ where: { projectId } });
+    const epicTitleMap: Record<string, string> = {};
+    const epicKeyMap:   Record<string, string> = {};
+
+    // ── Pass 1: create Epics ────────────────────────────────────────────────
+    for (const t of parsed) {
+      if (mapJiraType(t.type) !== 'EPIC' || !t.title) continue;
+      const existing = await prisma.epic.findFirst({ where: { projectId, title: t.title } });
+      if (existing) {
+        if (t.issueKey) epicKeyMap[t.issueKey] = existing.id;
+        epicTitleMap[norm(t.title)] = existing.id;
+        continue;
+      }
+      const epic = await prisma.epic.create({
+        data: { title: t.title, description: t.description, projectId, creatorId: req.user!.userId },
+      });
+      if (t.issueKey) epicKeyMap[t.issueKey] = epic.id;
+      epicTitleMap[norm(t.title)] = epic.id;
+    }
+
+    // ── Pass 2: create Tasks ────────────────────────────────────────────────
+    let created = 0, skipped = 0;
+    for (const [i, t] of parsed.entries()) {
+      if (!t.title) { skipped++; continue; }
+
+      // Resolve epicId
+      let epicId: string | null = null;
+      if (t.epicLink) {
+        const linkNorm = t.epicLink.trim();
+        epicId = epicKeyMap[linkNorm] ?? epicTitleMap[norm(linkNorm)] ?? null;
+        if (!epicId) {
+          const existing = await prisma.epic.findFirst({ where: { projectId, title: linkNorm } });
+          if (existing) { epicId = existing.id; }
+          else {
+            const newEpic = await prisma.epic.create({ data: { title: linkNorm, projectId, creatorId: req.user!.userId } });
+            epicId = newEpic.id;
+            epicTitleMap[norm(linkNorm)] = epicId;
+          }
+        }
+      }
+
+      // Skip duplicates
+      if (t.issueKey) {
+        const exists = await prisma.task.findFirst({ where: { taskKey: t.issueKey, projectId } });
+        if (exists) { skipped++; continue; }
+      }
+
+      const assigneeId = findUserId(t.assigneeRaw);
+      const type = mapJiraType(t.type);
+
+      await prisma.task.create({
+        data: {
+          taskKey:     t.issueKey || `${project.key}-${taskCount + created + 1}`,
+          title:       t.title,
+          description: t.description,
+          type:        type === 'EPIC' ? 'TASK' : type,
+          priority:    mapJiraPriority(t.priority),
+          storyPoints: t.storyPoints,
+          columnId:    findColumnId(colMap, t.status),
+          epicId,
+          projectId,
+          creatorId:   req.user!.userId,
+          ...(assigneeId ? { assignees: { create: [{ userId: assigneeId }] } } : {}),
+        },
+      });
+      created++;
+    }
+
+    fs.unlinkSync(req.file.path);
+    res.json({
+      success: true,
+      message: `Importação XML concluída: ${created} tasks e ${Object.keys(epicTitleMap).length} épicos criados, ${skipped} ignorados.`,
+      data: { created, skipped, epicsCreated: Object.keys(epicTitleMap).length },
+    });
+  } catch (err) {
+    if (req.file?.path) try { fs.unlinkSync(req.file.path); } catch {}
+    console.error('[import/jira-xml]', err);
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Erro ao processar XML.' });
+  }
+});
+
 router.post('/confluence-html', upload.single('file'), async (req: AuthRequest, res: Response) => {
   if (!req.file) { res.status(400).json({ success: false, error: 'Nenhum arquivo enviado.' }); return; }
   const { projectId, spaceId } = req.body;

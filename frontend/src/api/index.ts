@@ -121,6 +121,11 @@ export const importApi = {
     fd.append('file', file); fd.append('projectId', projectId);
     return api.post<ApiResponse<ImportResult>>('/import/jira-json', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
+  jiraXml: (file: File, projectId: string) => {
+    const fd = new FormData();
+    fd.append('file', file); fd.append('projectId', projectId);
+    return api.post<ApiResponse<ImportResult>>('/import/jira-xml', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
   confluenceHtml: (file: File, projectId: string, spaceId?: string) => {
     const fd = new FormData();
     fd.append('file', file); fd.append('projectId', projectId);

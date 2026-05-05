@@ -2,13 +2,14 @@ import { useState, useRef } from 'react';
 import { importApi } from '../api';
 import { useAppStore } from '../store/useAppStore';
 
-type ImportType = 'jira-csv' | 'jira-json' | 'confluence-html' | 'excel-tasks' | 'document';
+type ImportType = 'jira-csv' | 'jira-json' | 'jira-xml' | 'confluence-html' | 'excel-tasks' | 'document';
 
 const IMPORT_OPTIONS: Array<{ id: ImportType; icon: string; label: string; desc: string; formats: string; task: boolean }> = [
-  { id: 'jira-csv',        icon: '🟦', label: 'Jira — CSV Export',        desc: 'Importe issues do Jira via exportação CSV. Mantém tipo, prioridade, status e story points.',                   formats: '.csv',                    task: true  },
+  { id: 'jira-csv',        icon: '🟦', label: 'Jira — CSV Export',        desc: 'Importe issues do Jira via CSV. Suporta tipo, prioridade, status, descrição, épicos e responsáveis.',           formats: '.csv',                    task: true  },
+  { id: 'jira-xml',        icon: '🟦', label: 'Jira — XML Export',        desc: 'Importe issues do Jira via exportação XML (RSS). Inclui descrições completas, épicos, story points e assignees.', formats: '.xml',                    task: true  },
   { id: 'jira-json',       icon: '🟦', label: 'Jira — JSON Export',        desc: 'Importe issues do Jira Cloud via exportação JSON (Issues Export).',                                            formats: '.json',                   task: true  },
   { id: 'confluence-html', icon: '🟩', label: 'Confluence — HTML/ZIP',     desc: 'Importe páginas do Confluence exportadas como HTML ou como um arquivo ZIP de um espaço inteiro.',              formats: '.html, .htm, .zip',       task: false },
-  { id: 'excel-tasks',     icon: '📗', label: 'Excel — Planilha de Tasks', desc: 'Importe tasks de uma planilha Excel. Colunas: Title, Type, Priority, Status, Story Points, Description.',      formats: '.xlsx, .xls',             task: true  },
+  { id: 'excel-tasks',     icon: '📗', label: 'Excel — Planilha de Tasks', desc: 'Importe tasks de uma planilha Excel. Colunas: Título, Tipo, Prioridade, Status, Story Points, Descrição.',     formats: '.xlsx, .xls',             task: true  },
   { id: 'document',        icon: '📄', label: 'Documento Único',           desc: 'Importe um documento avulso: Markdown (.md), HTML, Word (.docx) ou PDF como página de documentação.',          formats: '.md, .html, .docx, .pdf', task: false },
 ];
 
@@ -31,6 +32,7 @@ export function ImportPage() {
       switch (selected) {
         case 'jira-csv':        res = await importApi.jiraCsv(file, activeProjectId);        break;
         case 'jira-json':       res = await importApi.jiraJson(file, activeProjectId);       break;
+        case 'jira-xml':        res = await importApi.jiraXml(file, activeProjectId);        break;
         case 'confluence-html': res = await importApi.confluenceHtml(file, activeProjectId); break;
         case 'excel-tasks':     res = await importApi.excelTasks(file, activeProjectId);     break;
         case 'document':        res = await importApi.document(file, activeProjectId);        break;
