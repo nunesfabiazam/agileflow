@@ -1,3 +1,4 @@
+import { prisma } from '../lib/prisma';
 /**
  * AgileFlow — Import Module
  *
@@ -16,12 +17,10 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const upload = multer({
   dest: '/tmp/agileflow-imports/',

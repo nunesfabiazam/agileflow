@@ -1,9 +1,9 @@
+import { prisma } from '../lib/prisma';
 import { Router, Request, Response } from 'express';
 import { PrismaClient, NotificationType } from '@prisma/client';
 import { z } from 'zod';
 
 const router = Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 // GET /api/tasks/:taskId/comments
 router.get('/', async (req: Request, res: Response) => {

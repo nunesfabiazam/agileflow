@@ -1,14 +1,13 @@
+import { prisma } from '../lib/prisma';
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
 import crypto from 'crypto';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const RegisterSchema = z.object({
   name:     z.string().min(2).max(100),

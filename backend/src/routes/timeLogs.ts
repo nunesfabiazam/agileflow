@@ -1,11 +1,10 @@
+import { prisma } from '../lib/prisma';
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
 
 const router = Router({ mergeParams: true });
-const prisma = new PrismaClient();
 router.use(authenticate as any);
 
 // GET /api/tasks/:taskId/time-logs

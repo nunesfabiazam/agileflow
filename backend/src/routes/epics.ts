@@ -1,11 +1,10 @@
+import { prisma } from '../lib/prisma';
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
 
 const router = Router();
-const prisma = new PrismaClient();
 router.use(authenticate as any);
 
 const EpicSchema = z.object({

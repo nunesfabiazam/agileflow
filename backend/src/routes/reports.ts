@@ -1,10 +1,9 @@
+import { prisma } from '../lib/prisma';
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
 
 const router = Router();
-const prisma = new PrismaClient();
 router.use(authenticate as any);
 
 // GET /api/reports/sprint/:sprintId — Burndown + velocity + team productivity
